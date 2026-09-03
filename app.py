@@ -7,7 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1lKvibuoBTYuYVXaCocCSN1Ykr6cz6vks
 """
 
-!pip install streamlit
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
