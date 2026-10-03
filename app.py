@@ -5,7 +5,7 @@ st.set_page_config(page_title="Dashboard Monitoring PLTS Grt Surya", layout="wid
 
 st.title("Dashboard Monitoring PLTS Grt Surya")
 
-# Masukkan link HTTPS dari ngrok ke dalam tanda kutip di bawah ini:
-ngrok_url = "https://xxxx-xxxx.ngrok-free.app"
+# Ganti tulisan di dalam tanda kutip di bawah ini dengan link Forwarding HTTPS dari Ngrok Anda:
+ngrok_url = "https://masukkan-link-asli-dari-ngrok.ngrok-free.app"
 
 components.iframe(ngrok_url, height=850, scrolling=True)
