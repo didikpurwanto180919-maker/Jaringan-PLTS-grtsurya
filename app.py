@@ -7,29 +7,29 @@ st.set_page_config(
     layout="wide",
 )
 
+# Judul Aplikasi
 st.title("⚡ Dashboard Monitoring GRT Surya - PLTS")
 st.markdown("---")
 
-# Sidebar untuk input URL Ngrok dinamis
-st.sidebar.header("⚙️ Konfigurasi Koneksi Ngrok")
-ngrok_url = st.sidebar.text_input(
-    "Masukkan URL Ngrok aktif dari PC Kantor:",
-    value="",
-    placeholder="https://xxxx.ngrok-free.app",
-)
+# URL Ngrok yang sudah di-hardcode
+NGROK_URL = "https://reveler-striking-feminist.ngrok-free.dev"
+
+# Sidebar Informasi Status
+st.sidebar.header("⚙️ Status Koneksi")
+st.sidebar.success("Status: Terhubung ke Ngrok Tunnel")
+st.sidebar.markdown(f"**URL Aktif:** `{NGROK_URL}`")
 
 st.sidebar.info(
-    "💡 Pastikan PC di jaringan internal PLTS sedang menjalankan `ngrok http http://grtsurya.indonesiapower.co.id:82`."
+    "💡 Pastikan PC kantor di jaringan internal PLTS tetap aktif menjalankan perintah Ngrok ke server `http://grtsurya.indonesiapower.co.id:82`."
 )
 
 # Main Content
-if not ngrok_url:
-    st.warning(
-        "⚠️ Silakan masukkan **URL Ngrok** aktif pada kolom di sidebar sebelah kiri untuk menampilkan dashboard."
+st.success(f"Menampilkan mirror dari server internal via: `{NGROK_URL}`")
+
+# Embedding halaman web internal menggunakan iframe
+try:
+    st.components.v1.iframe(NGROK_URL, height=800, scrolling=True)
+except Exception as e:
+    st.error(
+        f"Gagal memuat halaman. Pastikan sesi Ngrok di PC kantor Anda masih aktif. Error: {e}"
     )
-else:
-    st.success(f"Menampilkan mirror dari server internal via: `{ngrok_url}`")
-    try:
-        st.components.v1.iframe(ngrok_url, height=800, scrolling=True)
-    except Exception as e:
-        st.error(f"Gagal memuat iframe. Error: {e}")
