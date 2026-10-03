@@ -42,7 +42,7 @@ def fetch_plts_data(url):
     except requests.exceptions.Timeout:
         return "Waktu koneksi habis (Timeout). Server terlalu lama merespons.", "error"
     except Exception as e:
-        return fTerjadi kesalahan: {str(e)}", "error"
+        return f"Terjadi kesalahan: {str(e)}", "error"
 
 # Main Content
 with st.spinner("Menghubungkan ke server GRT Surya..."):
@@ -51,11 +51,6 @@ with st.spinner("Menghubungkan ke server GRT Surya..."):
 if data_type == "json":
     st.success("Berhasil terhubung dan mendapatkan data JSON dari server!")
     st.json(result)
-    
-    # Contoh jika data JSON berupa list/dictionary yang bisa diubah ke DataFrame Pandas
-    # if isinstance(result, list):
-    #     df = pd.DataFrame(result)
-    #     st.dataframe(df)
 
 elif data_type == "text":
     st.warning("Server merespons, tetapi format data bukan JSON. Berikut isi teks/HTML dari server:")
