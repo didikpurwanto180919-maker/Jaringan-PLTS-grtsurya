@@ -1,62 +1,71 @@
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
 import streamlit as st
-import time
+import requests
+import pandas as pd
 
+# Konfigurasi halaman Streamlit
 st.set_page_config(
-    page_title="Monitoring GRT Surya - Streamlit",
-    page_icon="⚡",
-    layout="wide",
+    page_title="Monitoring PLTS - GRT Surya",
+    page_icon="☀️",
+    layout="wide"
 )
 
-st.title("⚡ Monitoring Grati 1.5 MWp Land-based Bifacial PV")
-st.write("Menghubungkan data dari `http://grtsurya.indonesiapower.co.id:82/`")
+st.title("☀️ Dashboard Monitoring PLTS")
+st.markdown("Menghubungkan Streamlit ke server internal: `http://grtsurya.indonesiapower.co.id:82/`")
 
+# Sidebar untuk pengaturan / tombol refresh
+st.sidebar.header("Pengaturan Koneksi")
+api_url = st.sidebar.text_input(
+    "URL API Target", 
+    value="http://grtsurya.indonesiapower.co.id:82/"
+)
+refresh_btn = st.sidebar.button("Muat Ulang Data")
 
-# Fungsi untuk mengambil data
-@st.cache_data(ttl=60)  # Cache data selama 60 detik agar tidak spam request
-3
-def fetch_data():
-  url = "http://grtsurya.indonesiapower.co.id:82/"
-  try:
-    # Mengambil konten halaman web
-    response = requests.get(url, timeout=10)
-    response.raise_for_status()
+# Fungsi untuk mengambil data dari server
+def fetch_plts_data(url):
+    try:
+        # Mengirim request GET ke server (dengan timeout 5 detik)
+        response = requests.get(url, timeout=5)
+        
+        # Cek apakah request berhasil (status 200)
+        if response.status_code == 200:
+            # Jika server mengembalikan JSON
+            try:
+                return response.json(), "json"
+            except ValueError:
+                # Jika server mengembalikan teks biasa / HTML
+                return response.text, "text"
+        else:
+            return f"Error: Server merespons dengan status code {response.status_code}", "error"
+            
+    except requests.exceptions.ConnectionError:
+        return "Gagal terhubung! Pastikan Anda sudah terhubung ke jaringan internal / VPN perusahaan.", "error"
+    except requests.exceptions.Timeout:
+        return "Waktu koneksi habis (Timeout). Server terlalu lama merespons.", "error"
+    except Exception as e:
+        return fTerjadi kesalahan: {str(e)}", "error"
 
-    # Opsi 1: Jika data berupa tabel HTML di dalam halaman
-    # pandas.read_html akan otomatis mencari tag <table> dan mengubahnya jadi dataframe
-    tables = pd.read_html(response.text)
-    if tables:
-      return tables[
-          0
-      ], None  # Mengambil tabel pertama yang ditemukan di halaman
+# Main Content
+with st.spinner("Menghubungkan ke server GRT Surya..."):
+    result, data_type = fetch_plts_data(api_url)
 
-    return None, "Tidak ditemukan tabel data pada halaman tersebut."
+if data_type == "json":
+    st.success("Berhasil terhubung dan mendapatkan data JSON dari server!")
+    st.json(result)
+    
+    # Contoh jika data JSON berupa list/dictionary yang bisa diubah ke DataFrame Pandas
+    # if isinstance(result, list):
+    #     df = pd.DataFrame(result)
+    #     st.dataframe(df)
 
-  except Exception as e:
-    return None, str(e)
+elif data_type == "text":
+    st.warning("Server merespons, tetapi format data bukan JSON. Berikut isi teks/HTML dari server:")
+    st.text_area("Respon Server", result, height=300)
 
-
-# Tombol Refresh Manual
-if st.button("Refresh Data"):
-  st.cache_data.clear()
-
-# Memuat data
-with st.spinner("Mengambil data dari server Grt Surya..."):
-  df, error = fetch_data()
-
-if error:
-  st.error(
-      f"Gagal terhubung ke server: {error}. Pastikan Anda terhubung ke jaringan"
-      " internal / VPN Indonesia Power."
-  )
 else:
-  st.success("Berhasil terhubung ke server!")
-
-  # Tampilkan metrik atau ringkasan jika ada kolom tertentu
-  st.subheader("Data Monitoring Terkini")
-  st.dataframe(df, use_container_width=True)
-
-  # Contoh visualisasi sederhana jika ada kolom numerik
-  # st.line_chart(df['Nama_Kolom_Daya'])
+    st.error(result)
+    st.info(
+        "**Tips Troubleshooting:**\n"
+        "1. Pastikan komputer Anda terhubung ke jaringan lokal (LAN) PLTS / Indonesia Power.\n"
+        "2. Jika akses dari luar kantor, pastikan VPN perusahaan sudah aktif.\n"
+        "3. Cek apakah port `:82` diizinkan oleh firewall komputer Anda."
+    )
