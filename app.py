@@ -1,79 +1,62 @@
-import streamlit as st
+import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+import streamlit as st
+import time
 
-# Konfigurasi Halaman Streamlit
 st.set_page_config(
-    page_title="Monitoring PLTS Grati 1.5 MWp",
-    page_icon="☀️",
-    layout="wide"
+    page_title="Monitoring GRT Surya - Streamlit",
+    page_icon="⚡",
+    layout="wide",
 )
 
-st.title("☀️ Monitoring PLTS Grati POMU 1.5 MWp")
+st.title("⚡ Monitoring Grati 1.5 MWp Land-based Bifacial PV")
+st.write("Menghubungkan data dari `http://grtsurya.indonesiapower.co.id:82/`")
 
-# Input URL Ngrok dari Sidebar agar mudah diubah tanpa edit kode
-st.sidebar.header("Konfigurasi Koneksi")
-url_ngrok = st.sidebar.text_input(
-    "Masukkan URL Ngrok Lokal:", 
-    placeholder="https://xxxx-xxx-xxx.ngrok-free.app"
-)
 
-st.sidebar.info(
-    "💡 **Petunjuk:**\n"
-    "1. Jalankan `ngrok http http://grtsurya.indonesiapower.co.id:82` di CMD PC lokal PLTS.\n"
-    "2. Salin URL publik dari Ngrok ke kolom di atas."
-)
+# Fungsi untuk mengambil data
+@st.cache_data(ttl=60)  # Cache data selama 60 detik agar tidak spam request
+3
+def fetch_data():
+  url = "http://grtsurya.indonesiapower.co.id:82/"
+  try:
+    # Mengambil konten halaman web
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
 
-headers = {
-    "User-Agent": "Mozilla/5.0",
-    "ngrok-skip-browser-warning": "69420"  # Bypass halaman konfirmasi ngrok
-}
+    # Opsi 1: Jika data berupa tabel HTML di dalam halaman
+    # pandas.read_html akan otomatis mencari tag <table> dan mengubahnya jadi dataframe
+    tables = pd.read_html(response.text)
+    if tables:
+      return tables[
+          0
+      ], None  # Mengambil tabel pertama yang ditemukan di halaman
 
-@st.cache_data(ttl=30)  # Refresh data setiap 30 detik
-def ambil_data_plts(target_url):
-    try:
-        response = requests.get(target_url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            return response.text, None
-        else:
-            return None, f"HTTP Status Code: {response.status_code}"
-    except Exception as e:
-        return None, str(e)
+    return None, "Tidak ditemukan tabel data pada halaman tersebut."
 
-if url_ngrok:
-    html_content, error_msg = ambil_data_plts(url_ngrok)
-    
-    if error_msg:
-        st.error(f"❌ Gagal Terhubung ke Server PLTS: {error_msg}")
-        st.warning("Pastikan Ngrok dan PC lokal di jaringan PLTS masih aktif.")
-    else:
-        st.success("✅ Terhubung ke Dasbor PLTS Grati!")
-        
-        # Parse HTML menggunakan BeautifulSoup
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
-        # Tampilan Ringkasan dengan Tabs
-        tab1, tab2 = st.tabs(["📊 Dasbor Tampilan", "🔍 Mentah / Debug HTML"])
-        
-        with tab1:
-            st.subheader("Ringkasan Parameter Operasional")
-            
-            # Baris Metrik Utama (Contoh layout kartu)
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric(label="Status Jaringan", value="On-Grid")
-            with col2:
-                st.metric(label="Kapasitas String", value="1507.00 kWp")
-            with col3:
-                st.metric(label="Frekuensi AC", value="49.98 Hz")
-            with col4:
-                st.metric(label="Suhu Lingkungan", value="28.50 °C")
-                
-            st.write("---")
-            st.info("ℹ️ Tampilan data mentah berhasil ditarik dari jaringan lokal PLTS.")
+  except Exception as e:
+    return None, str(e)
 
-        with tab2:
-            st.subheader("Struktur HTML Halaman Dasbor")
-            st.text_area("Isi HTML Terambil", value=soup.prettify()[:2000], height=300)
+
+# Tombol Refresh Manual
+if st.button("Refresh Data"):
+  st.cache_data.clear()
+
+# Memuat data
+with st.spinner("Mengambil data dari server Grt Surya..."):
+  df, error = fetch_data()
+
+if error:
+  st.error(
+      f"Gagal terhubung ke server: {error}. Pastikan Anda terhubung ke jaringan"
+      " internal / VPN Indonesia Power."
+  )
 else:
-    st.warning("⚠️ Silakan masukkan URL Ngrok pada panel di sebelah kiri (sidebar) untuk mulai menampilkan data.")
+  st.success("Berhasil terhubung ke server!")
+
+  # Tampilkan metrik atau ringkasan jika ada kolom tertentu
+  st.subheader("Data Monitoring Terkini")
+  st.dataframe(df, use_container_width=True)
+
+  # Contoh visualisasi sederhana jika ada kolom numerik
+  # st.line_chart(df['Nama_Kolom_Daya'])
