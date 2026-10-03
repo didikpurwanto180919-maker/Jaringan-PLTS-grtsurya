@@ -1,4 +1,3 @@
-import os
 import streamlit as st
 
 # Konfigurasi halaman Streamlit
@@ -8,34 +7,29 @@ st.set_page_config(
     layout="wide",
 )
 
-# Judul Aplikasi
 st.title("⚡ Dashboard Monitoring GRT Surya - PLTS")
 st.markdown("---")
 
-# Mengatur Authtoken Ngrok secara otomatis dari kode
-NGROK_AUTH_TOKEN = "3IgKMhfPKRux6o3FF7im5WfcwRW_aZnMxYB1p5XGSDrgEykM"
-TARGET_URL = "http://grtsurya.indonesiapower.co.id:82"
+# Sidebar untuk input URL Ngrok dinamis
+st.sidebar.header("⚙️ Konfigurasi Koneksi Ngrok")
+ngrok_url = st.sidebar.text_input(
+    "Masukkan URL Ngrok aktif dari PC Kantor:",
+    value="",
+    placeholder="https://xxxx.ngrok-free.app",
+)
 
-# Sidebar untuk informasi status
-st.sidebar.header("⚙️ Status Koneksi")
-st.sidebar.info(f"Target Internal: `{TARGET_URL}`")
-
-# Peringatan jika dijalankan di Streamlit Cloud (karena Streamlit Cloud tidak bisa menjangkau jaringan lokal perusahaan secara langsung)
-st.sidebar.warning(
-    "💡 Catatan: Jika aplikasi ini di-deploy ke Streamlit Cloud (publik), "
-    "koneksi ke `indonesiapower.co.id` hanya bisa dilakukan jika aplikasi ini "
-    "dijalankan secara lokal di komputer dalam jaringan pembangkit."
+st.sidebar.info(
+    "💡 Pastikan PC di jaringan internal PLTS sedang menjalankan `ngrok http http://grtsurya.indonesiapower.co.id:82`."
 )
 
 # Main Content
-st.success(f"Menghubungkan ke server internal via Ngrok...")
-
-# Embedding halaman web internal menggunakan iframe
-try:
-    # Jika Anda menjalankan skrip ini secara lokal di PC kantor:
-    # Anda bisa langsung menggunakan URL target atau URL ngrok yang terhubung
-    st.components.v1.iframe(TARGET_URL, height=800, scrolling=True)
-except Exception as e:
-    st.error(
-        f"Gagal memuat halaman. Pastikan komputer Anda terhubung ke jaringan internal PLTS. Error: {e}"
+if not ngrok_url:
+    st.warning(
+        "⚠️ Silakan masukkan **URL Ngrok** aktif pada kolom di sidebar sebelah kiri untuk menampilkan dashboard."
     )
+else:
+    st.success(f"Menampilkan mirror dari server internal via: `{ngrok_url}`")
+    try:
+        st.components.v1.iframe(ngrok_url, height=800, scrolling=True)
+    except Exception as e:
+        st.error(f"Gagal memuat iframe. Error: {e}")
