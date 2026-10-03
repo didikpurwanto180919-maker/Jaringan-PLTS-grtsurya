@@ -1,29 +1,15 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
-st.set_page_config(
-    page_title="Portal Monitoring PLTS Grt Surya", layout="wide"
-)
+st.set_page_config(page_title="Dashboard Monitoring PLTS Grt Surya", layout="wide")
 
-st.title("☀️ Portal Dashboard Monitoring PLTS Grt Surya")
+st.title("Dashboard Monitoring PLTS Grt Surya")
 st.info(
-    "ℹ️ Pastikan perangkat Anda sudah terhubung ke jaringan internal / LAN"
-    " kantor PLTGU/PLTS Grati."
+    "Menampilkan dashboard internal secara langsung (Mirroring via Jaringan"
+    " Lokal)."
 )
 
-st.write("---")
-
-# Tombol interaktif untuk membuka dashboard lokal
-st.markdown(
-    "### Klik tombol di bawah untuk membuka dashboard monitoring secara"
-    " langsung:"
-)
-st.link_button(
-    "🚀 Buka Dashboard GRT Surya", "http://grtsurya.indonesiapower.co.id:82/"
-)
-
-st.write("")
-st.caption(
-    "Catatan: Dashboard ini menggunakan jaringan lokal kantor dan tidak dapat"
-    " dimuat langsung di dalam halaman cloud demi alasan keamanan jaringan"
-    " perusahaan."
+# Menyematkan dashboard internal secara utuh dalam satu layar
+components.iframe(
+    "http://grtsurya.indonesiapower.co.id:82/", height=850, scrolling=True
 )
