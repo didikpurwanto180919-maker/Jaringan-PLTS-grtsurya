@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 
 # Konfigurasi halaman Streamlit
@@ -11,43 +12,30 @@ st.set_page_config(
 st.title("⚡ Dashboard Monitoring GRT Surya - PLTS")
 st.markdown("---")
 
-# Sidebar untuk konfigurasi URL Ngrok
-st.sidebar.header("⚙️ Konfigurasi Koneksi")
-st.sidebar.info(
-    "Masukkan URL publik Ngrok yang aktif dari server internal pembangkit."
-)
+# Mengatur Authtoken Ngrok secara otomatis dari kode
+NGROK_AUTH_TOKEN = "3IgKMhfPKRux6o3FF7im5WfcwRW_aZnMxYB1p5XGSDrgEykM"
+TARGET_URL = "http://grtsurya.indonesiapower.co.id:82"
 
-# Input URL Ngrok oleh pengguna (bisa diubah dinamis atau di-hardcode)
-ngrok_url = st.sidebar.text_input(
-    "URL Ngrok (contoh: https://xxxx.ngrok-free.app)",
-    value="",  # Masukkan URL ngrok default Anda di sini jika ada
+# Sidebar untuk informasi status
+st.sidebar.header("⚙️ Status Koneksi")
+st.sidebar.info(f"Target Internal: `{TARGET_URL}`")
+
+# Peringatan jika dijalankan di Streamlit Cloud (karena Streamlit Cloud tidak bisa menjangkau jaringan lokal perusahaan secara langsung)
+st.sidebar.warning(
+    "💡 Catatan: Jika aplikasi ini di-deploy ke Streamlit Cloud (publik), "
+    "koneksi ke `indonesiapower.co.id` hanya bisa dilakukan jika aplikasi ini "
+    "dijalankan secara lokal di komputer dalam jaringan pembangkit."
 )
 
 # Main Content
-if not ngrok_url:
-    st.warning(
-        "⚠️ Silakan masukkan **URL Ngrok** yang valid pada sidebar sebelah kiri untuk mulai melakukan mirror."
+st.success(f"Menghubungkan ke server internal via Ngrok...")
+
+# Embedding halaman web internal menggunakan iframe
+try:
+    # Jika Anda menjalankan skrip ini secara lokal di PC kantor:
+    # Anda bisa langsung menggunakan URL target atau URL ngrok yang terhubung
+    st.components.v1.iframe(TARGET_URL, height=800, scrolling=True)
+except Exception as e:
+    st.error(
+        f"Gagal memuat halaman. Pastikan komputer Anda terhubung ke jaringan internal PLTS. Error: {e}"
     )
-
-    with st.expander("📖 Panduan Singkat"):
-        st.markdown(
-            """
-        1. Pastikan komputer lokal di jaringan internal PLTS sudah menjalankan perintah Ngrok:
-           ```bash
-           ngrok http [http://grtsurya.indonesiapower.co.id:82](http://grtsurya.indonesiapower.co.id:82)
-           ```
-        2. Salin URL HTTPS yang dihasilkan oleh Ngrok (contoh: `https://xxxx.ngrok-free.app`).
-        3. Masukkan URL tersebut ke kolom input di sidebar aplikasi ini.
-        """
-        )
-else:
-    # Perbaikan Syntax: Tambahkan tanda f-string yang benar di sini
-    st.success(f"Menampilkan mirror dari server internal via: `{ngrok_url}`")
-
-    # Embedding halaman web internal menggunakan iframe Streamlit
-    try:
-        st.components.v1.iframe(ngrok_url, height=800, scrolling=True)
-    except Exception as e:
-        st.error(
-            f"Gagal memuat iframe. Periksa apakah URL Ngrok masih aktif. Error: {e}"
-        )
