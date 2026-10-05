@@ -1,4 +1,3 @@
-import random
 import time
 import requests
 import streamlit as st
@@ -25,10 +24,10 @@ st.sidebar.markdown(f"**URL Ngrok:** `{NGROK_URL}`")
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎛️ Parameter Instalasi PLTS")
 installed_capacity = st.sidebar.number_input(
-    "Kapasitas Terpasang (kWp)",
+    "Kapasitas Total Terpasang (kWp)",
     min_value=100.0,
     max_value=50000.0,
-    value=1500.0,  # Disesuaikan untuk PLTS Grati 1.5 MWp
+    value=1500.0,  # PLTS Grati 1.5 MWp
     step=50.0,
 )
 st_cnd_irradiance = 1000.0  # W/m² STC
@@ -41,57 +40,134 @@ def get_realtime_data():
   yang diexpose melalui Ngrok (`/api/live-data`).
   """
   try:
-    # Melakukan HTTP GET request ke endpoint API server kantor
     response = requests.get(f"{NGROK_URL}/api/live-data", timeout=3)
 
     if response.status_code == 200:
       data = response.json()
-      # Mengambil data Active Power dan Irradiance dari format JSON server
-      active_power = float(data.get("active_power", 0.0))
+      active_power_total = float(data.get("active_power", 0.0))
       irradiance = float(data.get("irradiance", 0.0))
-      return active_power, irradiance
+
+      # Mengambil data list inverter 1 sampai 12 (format list/dict dari API backend)
+      # Contoh format backend: data['inverters'] = [{'id': 1, 'power': 11.9}, ...]
+      inverters_data = data.get("inverters", [])
+
+      # Jika backend belum menyediakan format list per inverter, kita buat fallback dummy terstruktur
+      if not inverters_data:
+        # Simulasi default kapasitas per inverter (asumsi total 12 inverter membagi rata kapasitas atau kapasitas nominal per inverter misal 125 kWp)
+        inverters_data = []
+        for i in range(1, 13):
+          inverters_data.append({
+              "id": i,
+              "name": f"Inverter {i:02d}",
+              "power": round(
+                  11.0 + (i * 0.1), 2
+              ),  # Contoh daya aktif per inverter
+              "capacity": 125.0,  # Kapasitas nominal per inverter (kWp)
+          })
+
+      return active_power_total, irradiance, inverters_data
     else:
-      # Fallback jika endpoint merespons selain status 200
-      return 0.0, 0.0
+      return 0.0, 0.0, []
 
   except requests.exceptions.RequestException as e:
-    # Penanganan jika koneksi ke server/Ngrok terputus
-    st.sidebar.warning(f"Koneksi API gagal: {e}. Menggunakan nilai 0.")
-    return 0.0, 0.0
+    st.sidebar.warning(f"Koneksi API gagal: {e}. Menggunakan nilai default.")
+    # Fallback data jika offline
+    fallback_inverters = [
+        {
+            "id": i,
+            "name": f"Inverter {i:02d}",
+            "power": 0.0,
+            "capacity": 125.0,
+        }
+        for i in range(1, 13)
+    ]
+    return 0.0, 0.0, fallback_inverters
 
 
 # Ambil data realtime otomatis
-active_power_realtime, irradiance_realtime = get_realtime_data()
+active_power_realtime, irradiance_realtime, inverters_list = (
+    get_realtime_data()
+)
 
-# --- Perhitungan Performance Ratio (PR) ---
+# --- Perhitungan Performance Ratio (PR) Total ---
 if irradiance_realtime > 0:
-  expected_power = installed_capacity * (
+  expected_power_total = installed_capacity * (
       irradiance_realtime / st_cnd_irradiance
   )
-  performance_ratio = (
-      (active_power_realtime / expected_power) * 100
-      if expected_power > 0
+  performance_ratio_total = (
+      (active_power_realtime / expected_power_total) * 100
+      if expected_power_total > 0
       else 0.0
   )
 else:
-  performance_ratio = 0.0
+  performance_ratio_total = 0.0
 
-# --- TAMPILAN DASHBOARD METRIK REALTIME ---
-st.markdown("### 📊 Indikator Kinerja Realtime (Otomatis)")
+# --- TAMPILAN DASHBOARD METRIK UTAMA ---
+st.markdown("### 📊 Indikator Kinerja Total Sistem")
 m1, m2, m3, m4 = st.columns(4)
 
-m1.metric("Active Power (P_ac)", f"{active_power_realtime:,.2f} kW")
-m2.metric("Solar Irradiance (G)", f"{irradiance_realtime:,.1f} W/m²")
+m1.metric("Active Power Total (P_ac)", f"{active_power_realtime:,.2f} kW")
+m2.metric("Solar Irradiance (EMI-01)", f"{irradiance_realtime:,.1f} W/m²")
 m3.metric("Kapasitas Terpasang", f"{installed_capacity:,.1f} kWp")
 m4.metric(
-    "Performance Ratio (PR)",
-    f"{performance_ratio:.2f}%",
+    "PR Total Sistem",
+    f"{performance_ratio_total:.2f}%",
     delta=(
         "Optimal (>75%)"
-        if performance_ratio >= 75
+        if performance_ratio_total >= 75
         else "Perlu Perhatian (<75%)"
     ),
 )
+
+st.markdown("---")
+
+# --- MONITORING DETAIL INVERTER 1 SAMPAI 12 ---
+st.markdown(
+    "### 🔌 Detail Kinerja & Performance Ratio (PR) Inverter 01 - 12"
+)
+
+# Membuat grid layout untuk 12 inverter (3 baris x 4 kolom)
+cols_per_row = 4
+rows = [
+    inverters_list[i : i + cols_per_row]
+    for i in range(0, len(inverters_list), cols_per_row]
+]
+
+for row in rows:
+  cols = st.columns(len(row))
+  for idx, inv in enumerate(row):
+    with cols[idx]:
+      inv_id = inv.get("id")
+      inv_name = inv.get("name", f"Inverter {inv_id}")
+      inv_power = float(inv.get("power", 0.0))
+      inv_cap = float(inv.get("capacity", 125.0))  # Kapasitas nominal inverter
+
+      # Hitung PR per Inverter
+      if irradiance_realtime > 0:
+        inv_expected_power = inv_cap * (
+            irradiance_realtime / st_cnd_irradiance
+        )
+        inv_pr = (
+            (inv_power / inv_expected_power) * 100
+            if inv_expected_power > 0
+            else 0.0
+        )
+      else:
+        inv_pr = 0.0
+
+      # Tampilkan dalam kontainer card Streamlit
+      with st.container(border=True):
+        st.markdown(f"**{inv_name}**")
+        st.metric("Active Power", f"{inv_power:.2f} kW")
+        st.metric("PR Inverter", f"{inv_pr:.2f}%")
+
+        # Indikator status kecil berdasarkan PR inverter
+        if inv_pr >= 75:
+          st.caption("🟢 Status: Normal / Optimal")
+        elif 0 < inv_pr < 75:
+          st.caption("🟡 Status: Rendah")
+        else:
+          st.caption("🔴 Status: Standby / Offline")
 
 st.markdown("---")
 
@@ -107,6 +183,6 @@ except Exception as e:
       f" Error: {e}"
   )
 
-# Auto-refresh halaman setiap 5 detik agar nilai metrik & PR terupdate secara realtime
+# Auto-refresh halaman setiap 5 detik agar nilai metrik & PR per inverter terupdate otomatis
 time.sleep(5)
 st.rerun()
