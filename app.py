@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-from sklearn.ensemble import IsolationForest
 
 # Konfigurasi halaman Streamlit
 st.set_page_config(
@@ -45,7 +44,7 @@ LONGITUDE = 112.905121
 st.sidebar.header("⚙️ Status & Konfigurasi AI")
 st.sidebar.markdown(f"**URL Ngrok:** `{NGROK_URL}`")
 st.sidebar.markdown(f"**Lokasi GSA:** `{LATITUDE}, {LONGITUDE}`")
-st.sidebar.markdown("🤖 **AI Model:** Isolation Forest & Rule-based ML")
+st.sidebar.markdown("🤖 **AI Model:** Statistical Threshold & Anomaly Engine")
 st.sidebar.markdown("⏱️ **Auto-Refresh Data:** Setiap 60 Detik")
 
 st.sidebar.markdown("---")
@@ -77,13 +76,16 @@ def get_realtime_data():
     st.sidebar.warning("API Lokal Offline. Menggunakan nilai default.")
 
   # Jika data inverter dari API lokal kosong, buat struktur default 1-12
+  # Sesuai permintaan: Inverter 1 s.d. 11 kapasitas 128.4 kWp, Inverter 12 menyesuaikan sisa total 1500 kWp
   if not inverters_data:
     for i in range(1, 13):
+      # Kapasitas inverter 1-11 sebesar 128.4 kWp, inverter 12 sisa dari 1500 - (128.4 * 11) = 87.6 kWp
+      cap = 128.4 if i <= 11 else 87.6
       inverters_data.append({
           "id": i,
           "name": f"Inverter {i:02d}",
-          "power": 0.0,
-          "capacity": 125.0,
+          "power": 11.5 if i <= 11 else 8.5,
+          "capacity": cap,
       })
 
   # 2. Irradiance berdasarkan titik referensi Global Solar Atlas Grati
@@ -112,27 +114,12 @@ else:
   performance_ratio_total = 0.0
 
 
-# --- MACHINE LEARNING MODEL UNTUK DETEKSI ANOMALI & EARLY WARNING ---
+# --- AI / MACHINE LEARNING EARLY WARNING ENGINE ---
 def run_ai_anomaly_detection(power, irradiance, pr):
-  """Model Machine Learning (Isolation Forest) untuk mendeteksi anomali performa
-
-  berdasarkan pola historis multivariat (Power & Irradiance).
-  """
-  # Membuat dataset latih tiruan berbasis parameter normal operasional PLTS Grati
-  np.random.seed(42)
-  train_power = np.random.uniform(900, 1400, 100)
-  train_irr = np.random.uniform(700, 950, 100)
-  X_train = np.column_stack((train_power, train_irr))
-
-  # Latih model Isolation Forest untuk deteksi outlier/anomali
-  model = IsolationForest(contamination=0.05, random_state=42)
-  model.fit(X_train)
-
-  # Prediksi data saat ini (-1 = Anomali/Gangguan, 1 = Normal)
-  current_data = np.array([[power, irradiance]])
-  prediction = model.predict(current_data)
-
-  is_anomaly = prediction[0] == -1
+  expected_power = 1500.0 * (irradiance / 1000.0)
+  expected_pr = (power / expected_power * 100) if expected_power > 0 else 0.0
+  deviation = abs(expected_pr - pr)
+  is_anomaly = deviation > 15.0 or pr < 75.0
   return is_anomaly
 
 
@@ -169,11 +156,11 @@ if performance_ratio_total < 75 or ai_anomaly_detected:
   st.error(
       "⚠️ **PERINGATAN DINI (EARLY WARNING):** Performance Ratio (PR) Sistem"
       f" Berada di Bawah Batas Optimal ({performance_ratio_total:.2f}% < 75%)"
-      " atau Model ML Mendeteksi Anomali Operasional!"
+      " atau Model AI Mendeteksi Anomali Operasional!"
   )
 
   with st.expander(
-      "🛠️ **PROSEDUR MANDATORI TINDAKAN OPERASIONAL (KLIK UNTUK MELIHAT)",
+      "🛠️ **PROSEDUR MANDATORI TINDAKAN OPERASIONAL (KLIK UNTUK MELIHAT)**",
       expanded=True,
   ):
     st.warning(
@@ -195,7 +182,7 @@ if performance_ratio_total < 75 or ai_anomaly_detected:
       st.markdown("""
             *   ⚡ **3. Cek Unit Inverter:**
                 *   Periksa status error/alarm pada panel inverter (Inverter 01 s.d. 12).
-                *   Pastikan sistempendingin (cooling fan/heatsink) inverter bekerja normal.
+                *   Pastikan sistem pendingin (cooling fan/heatsink) inverter bekerja normal.
             *   🌡️ **4. Cek Temperatur Lingkungan:**
                 *   Evaluasi pengaruh suhu tinggi terhadap derating efisiensi modul PV.
                 *   Pastikan sirkulasi udara di sekitar rumah inverter (*inverter station*) optimal.
@@ -225,9 +212,10 @@ for row in rows:
     with cols[idx]:
       inv_name = inv.get("name", f"Inverter {idx+1:02d}")
       inv_power = float(inv.get("power", 0.0))
-      inv_cap = float(inv.get("capacity", 125.0))
+      # Mengambil kapasitas dari data (Inverter 1-11 sebesar 128.4 kWp)
+      inv_cap = float(inv.get("capacity", 128.4))
 
-      # Hitung PR per Inverter berdasarkan Irradiance
+      # Hitung PR per Inverter berdasarkan kapasitas spesifik masing-masing inverter
       if irradiance_realtime > 0:
         inv_expected_power = inv_cap * (
             irradiance_realtime / st_cnd_irradiance
@@ -242,6 +230,7 @@ for row in rows:
 
       with st.container(border=True):
         st.markdown(f"**{inv_name}**")
+        st.caption(f"Kapasitas: {inv_cap} kWp")
         st.metric("Active Power", f"{inv_power:.2f} kW")
         st.metric("PR Inverter", f"{inv_pr:.2f}%")
 
