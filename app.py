@@ -1,3 +1,4 @@
+from datetime import datetime
 import time
 import requests
 import streamlit as st
@@ -9,11 +10,15 @@ st.set_page_config(
     layout="wide",
 )
 
-# Judul Aplikasi
+# Judul Aplikasi & Tanggal Realtime
 st.title("⚡ Live Dashboard Monitoring & Performance Ratio (PR) GRT Surya")
+
+# Menampilkan Tanggal dan Waktu Realtime
+current_time_str = datetime.now().strftime("%A, %d %B %Y - %H:%M:%S")
+st.markdown(f"📅 **Waktu Server Realtime:** `{current_time_str}`")
 st.markdown("---")
 
-# URL Ngrok sumber data/SCADA internal untuk Inverter & Active Power
+# URL Ngrok sumber data/SCADA internal
 NGROK_URL = "https://reveler-striking-feminist.ngrok-free.dev"
 
 # Koordinat Global Solar Atlas PLTS Grati
@@ -24,6 +29,7 @@ LONGITUDE = 112.905121
 st.sidebar.header("⚙️ Status & Konfigurasi")
 st.sidebar.markdown(f"**URL Ngrok:** `{NGROK_URL}`")
 st.sidebar.markdown(f"**Lokasi GSA:** `{LATITUDE}, {LONGITUDE}`")
+st.sidebar.markdown("⏱️ **Auto-Refresh:** Setiap 60 Detik")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎛 Parameter Instalasi PLTS")
@@ -37,7 +43,7 @@ installed_capacity = st.sidebar.number_input(
 st_cnd_irradiance = 1000.0  # W/m² STC
 
 
-# --- FUNGSI AMBIL DATA ACTIVE POWER DARI API LOKAL & IRRADIANCE GLOBAL SOLAR ATLAS ---
+# --- FUNGSI AMBIL DATA ACTIVE POWER & IRRADIANCE ---
 def get_realtime_data():
   active_power_total = 0.0
   inverters_data = []
@@ -49,9 +55,9 @@ def get_realtime_data():
       data = response.json()
       active_power_total = float(data.get("active_power", 0.0))
       inverters_data = data.get("inverters", [])
-      st.sidebar.success("Status: Active Power terhubung ke SCADA Lokal")
+      st.sidebar.success("Status: Terhubung ke SCADA Lokal")
   except Exception as e:
-    st.sidebar.warning(f"API Lokal Offline. Error: {e}")
+    st.sidebar.warning(f"API Lokal Offline. Menggunakan nilai default.")
 
   # Jika data inverter dari API lokal kosong, buat struktur default 1-12
   if not inverters_data:
@@ -63,12 +69,8 @@ def get_realtime_data():
           "capacity": 125.0,
       })
 
-  # 2. Ambil Irradiance berdasarkan data Global Solar Atlas (Koordinat Grati)
-  # Catatan: Anda bisa memasukkan nilai estimasi/API cuaca atau data GSA spesifik titik ini.
-  # Di sini kita gunakan referensi data radiasi surya rata-rata/lokasi GSA Grati:
-  irradiance = (
-      825.5  # Contoh nilai acuan dari database Global Solar Atlas wilayah Grati
-  )
+  # 2. Irradiance berdasarkan titik referensi Global Solar Atlas Grati
+  irradiance = 825.5  # Nilai acuan radiasi surya wilayah Grati (W/m²)
 
   return active_power_total, irradiance, inverters_data
 
@@ -131,7 +133,7 @@ for row in rows:
       inv_power = float(inv.get("power", 0.0))
       inv_cap = float(inv.get("capacity", 125.0))
 
-      # Hitung PR per Inverter berdasarkan Irradiance GSA
+      # Hitung PR per Inverter berdasarkan Irradiance
       if irradiance_realtime > 0:
         inv_expected_power = inv_cap * (
             irradiance_realtime / st_cnd_irradiance
@@ -167,6 +169,6 @@ try:
 except Exception as e:
   st.error(f"Gagal memuat halaman iframe. Error: {e}")
 
-# Auto-refresh halaman setiap 5 detik
-time.sleep(5)
+# Auto-refresh halaman setiap 60 detik
+time.sleep(60)
 st.rerun()
