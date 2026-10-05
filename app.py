@@ -1,7 +1,7 @@
-from datetime import datetime
 import time
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Konfigurasi halaman Streamlit
 st.set_page_config(
@@ -10,12 +10,25 @@ st.set_page_config(
     layout="wide",
 )
 
-# Judul Aplikasi & Tanggal Realtime
+# Judul Aplikasi
 st.title("⚡ Live Dashboard Monitoring & Performance Ratio (PR) GRT Surya")
 
-# Menampilkan Tanggal dan Waktu Realtime
-current_time_str = datetime.now().strftime("%A, %d %B %Y - %H:%M:%S")
-st.markdown(f"📅 **Waktu Server Realtime:** `{current_time_str}`")
+# --- WIDGET JAM REAL-TIME BERDETAK (MENGGUNAKAN JAVASCRIPT) ---
+clock_html = """
+<div style="font-family: monospace; font-size: 18px; font-weight: bold; color: #2e7d32; background-color: #e8f5e9; padding: 10px; border-radius: 5px; display: inline-block;">
+    📅 Waktu Realtime: <span id="live-clock"></span>
+</div>
+<script>
+function updateClock() {
+    const now = new Date();
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+    document.getElementById('live-clock').innerText = now.toLocaleDateString('id-ID', options);
+}
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+"""
+components.html(clock_html, height=50)
 st.markdown("---")
 
 # URL Ngrok sumber data/SCADA internal
@@ -29,7 +42,7 @@ LONGITUDE = 112.905121
 st.sidebar.header("⚙️ Status & Konfigurasi")
 st.sidebar.markdown(f"**URL Ngrok:** `{NGROK_URL}`")
 st.sidebar.markdown(f"**Lokasi GSA:** `{LATITUDE}, {LONGITUDE}`")
-st.sidebar.markdown("⏱️ **Auto-Refresh:** Setiap 60 Detik")
+st.sidebar.markdown("⏱️ **Auto-Refresh Data:** Setiap 60 Detik")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎛 Parameter Instalasi PLTS")
@@ -56,8 +69,8 @@ def get_realtime_data():
       active_power_total = float(data.get("active_power", 0.0))
       inverters_data = data.get("inverters", [])
       st.sidebar.success("Status: Terhubung ke SCADA Lokal")
-  except Exception as e:
-    st.sidebar.warning(f"API Lokal Offline. Menggunakan nilai default.")
+  except Exception:
+    st.sidebar.warning("API Lokal Offline. Menggunakan nilai default.")
 
   # Jika data inverter dari API lokal kosong, buat struktur default 1-12
   if not inverters_data:
@@ -161,7 +174,7 @@ for row in rows:
 st.markdown("---")
 
 # Main Content: Embedding iframe SCADA / Server Internal
-st.subheader("🖥️ Live Mirror SCADA PLTGU Grati")
+st.subheader("🖥️️ Live Mirror SCADA PLTGU Grati")
 st.success(f"Menampilkan mirror dari server internal via: `{NGROK_URL}`")
 
 try:
@@ -169,6 +182,6 @@ try:
 except Exception as e:
   st.error(f"Gagal memuat halaman iframe. Error: {e}")
 
-# Auto-refresh halaman setiap 60 detik
+# Auto-refresh data backend setiap 60 detik
 time.sleep(60)
 st.rerun()
