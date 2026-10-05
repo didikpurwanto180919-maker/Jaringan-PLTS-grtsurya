@@ -1,97 +1,82 @@
-import datetime
-import random
 import streamlit as st
 
 # Konfigurasi halaman Streamlit
 st.set_page_config(
-    page_title="Dashboard PR & Iradiansi - PLTS GRT Surya",
+    page_title="Dashboard PR & Monitoring PLTS GRT Surya",
     page_icon="⚡",
     layout="wide",
 )
 
-# Judul Aplikasi
-st.title("⚡ Dashboard Monitoring & Performance Ratio (PR) - PLTS GRT Surya")
+# Judul Utama Aplikasi
+st.title("⚡ Dashboard Monitoring & Performance Ratio (PR) GRT Surya - PLTS")
 st.markdown("---")
 
-# URL Ngrok yang sudah di-hardcode
+# URL Ngrok dan Global Solar Atlas yang dikonfigurasi
 NGROK_URL = "https://reveler-striking-feminist.ngrok-free.dev"
+SOLAR_ATLAS_URL = "https://globalsolaratlas.info/map?c=-7.678604,112.905121,11&s=-7.649007,113.025970&m=site"
 
 # Sidebar Informasi Status
-st.sidebar.header("⚙️ Status Sistem & Lokasi")
-st.sidebar.success("Status: Terhubung ke Ngrok Tunnel")
-st.sidebar.markdown(f"**URL Aktif:** `{NGROK_URL}`")
-
-# Informasi Koordinat Lokasi (berdasarkan Global Solar Atlas)
-st.sidebar.markdown("### 📍 Lokasi Site")
-st.sidebar.text("Latitude: -7.678604\nLongitude: 112.905121")
-st.sidebar.markdown(
-    "[Buka Peta Global Solar Atlas](https://globalsolaratlas.info/map?c=-7.678604,112.905121,11&s=-7.649007,113.025970&m=site)",
-    unsafe_allow_html=True,
-)
+st.sidebar.header("⚙️ Status Koneksi & Sistem")
+st.sidebar.success("Status: Terhubung ke Ngrok & Global Solar Atlas")
+st.sidebar.markdown(f"**URL Mirror Aktif:** `{NGROK_URL}`")
 
 st.sidebar.info(
-    "💡 Pastikan PC kantor di jaringan internal PLTS tetap aktif menjalankan perintah Ngrok ke server internal."
+    "💡 Pastikan PC kantor di jaringan internal PLTS tetap aktif menjalankan perintah Ngrok ke server lokal."
 )
 
-# --- BAGIAN 1: METRIK REAL-TIME IRADIANSI & PERFORMANCE RATIO (PR) ---
-st.header("📊 Real-Time Performance Ratio & Solar Irradiance")
-st.markdown(
-    "Data parameter cuaca dan performa pembangkit secara *real-time* pada koordinat site."
-)
+# --- BAGIAN 1: METRIK UTAMA & PERFORMANCE RATIO (PR) REAL-TIME ---
+st.subheader("📊 Ringkasan Parameter & Performance Ratio (PR)")
 
-# Tombol untuk memperbarui data real-time
-col_btn1, col_btn2 = st.columns([1, 5])
-with col_btn1:
-    refresh_data = st.button("🔄 Refresh Data")
+# Membuat 4 kolom untuk metrik utama (Anda bisa menyesuaikan nilainya atau menghubungkannya ke API/data real-time server internal)
+col1, col2, col3, col4 = st.columns(4)
 
-# Simulasi / Pengambilan Data Real-Time (Dapat disesuaikan dengan API sensor aktual)
-# Menggunakan nilai acak yang wajar untuk simulasi live data jika belum tersambung langsung ke sensor
-current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-irradiance_val = round(random.uniform(750, 980), 2)  # W/m²
-ambient_temp = round(random.uniform(30.5, 35.2), 1)  # °C
-pr_val = round(
-    random.uniform(82.5, 89.1), 2
-)  # Performance Ratio dalam persentase (%)
-power_gen = round(random.uniform(1.2, 2.4), 2)  # MW
+with col1:
+    st.metric(label="Daya Aktif (Active Power)", value="-- kW", delta="Real-time")
 
-# Layout Metrik dalam 4 Kolom
-m1, m2, m3, m4 = st.columns(4)
-with m1:
-    st.metric(
-        label="☀️ GHI (Iradiansi Global)",
-        value=f"{irradiance_val} W/m²",
-        delta="+12 W/m²",
-    )
-with m2:
-    st.metric(
-        label="📈 Performance Ratio (PR)",
-        value=f"{pr_val} %",
-        delta="+0.4%",
-    )
-with m3:
-    st.metric(
-        label="⚡ Daya Aktif (Power Output)",
-        value=f"{power_gen} MW",
-        delta="-0.05 MW",
-    )
-with m4:
-    st.metric(
-        label="🌡️ Temperatur Modul/Ambien",
-        value=f"{ambient_temp} °C",
-        delta="+0.2 °C",
-    )
+with col2:
+    st.metric(label="Iradiance Global (GTI)", value="-- W/m²", delta="Live Data")
 
-st.caption(f"Terakhir diperbarui: {current_time} (WIB)")
+with col3:
+    st.metric(label="Performance Ratio (PR)", value="-- %", delta="Target > 80%")
+
+with col4:
+    st.metric(label="Temperatur Modul", value="-- °C", delta="Normal")
+
 st.markdown("---")
 
-# --- BAGIAN 2: EMBEDDING SERVER INTERNAL VIA NGROK ---
-st.header("🖥️ Mirror Server Internal PLTS")
-st.success(f"Menampilkan antarmuka asli dari server internal via: `{NGROK_URL}`")
+# --- BAGIAN 2: TAMPILAN DUA KOLOM (GLOBAL SOLAR ATLAS & MIRROR SERVER) ---
+col_left, col_right = st.columns(2)
 
-# Embedding halaman web internal menggunakan iframe
-try:
-    st.components.v1.iframe(NGROK_URL, height=700, scrolling=True)
-except Exception as e:
-    st.error(
-        f"Gagal memuat halaman. Pastikan sesi Ngrok di PC kantor Anda masih aktif. Error: {e}"
+# Kolom Kiri: Iradiance & Peta Global Solar Atlas
+with col_left:
+    st.subheader("🌍 Real-time Iradiance & Peta Solar (Global Solar Atlas)")
+    st.markdown(
+        "Menampilkan data radiasi surya dan parameter lokasi PLTS Grati."
     )
+    try:
+        # Menggunakan iframe untuk memuat peta Global Solar Atlas pada koordinat yang ditentukan
+        st.components.v1.iframe(
+            SOLAR_ATLAS_URL, height=600, scrolling=True
+        )
+    except Exception as e:
+        st.error(f"Gagal memuat Global Solar Atlas. Error: {e}")
+
+# Kolom Kanan: Mirror Server Internal (Daya Aktif & Monitoring Sistem)
+with col_right:
+    st.subheader("🖥️ Monitoring Daya Aktif (Server Internal PLTS)")
+    st.markdown(
+        f"Menampilkan mirror langsung dari server internal via: `{NGROK_URL}`"
+    )
+    try:
+        # Embedding halaman web internal menggunakan iframe
+        st.components.v1.iframe(NGROK_URL, height=600, scrolling=True)
+    except Exception as e:
+        st.error(
+            f"Gagal memuat halaman mirror. Pastikan sesi Ngrok aktif. Error: {e}"
+        )
+
+# Footer info tambahan
+st.markdown("---")
+st.caption(
+    "PLTS Grati Monitoring System | Dikembangkan dengan Streamlit untuk Operasional Pembangkit."
+)
