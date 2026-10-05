@@ -22,7 +22,7 @@ st.sidebar.success("Status: Terhubung ke Sistem Live")
 st.sidebar.markdown(f"**URL Ngrok:** `{NGROK_URL}`")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🎛️ Parameter Instalasi PLTS")
+st.sidebar.subheader("🎛️️ Parameter Instalasi PLTS")
 installed_capacity = st.sidebar.number_input(
     "Kapasitas Total Terpasang (kWp)",
     min_value=100.0,
@@ -48,20 +48,16 @@ def get_realtime_data():
       irradiance = float(data.get("irradiance", 0.0))
 
       # Mengambil data list inverter 1 sampai 12 (format list/dict dari API backend)
-      # Contoh format backend: data['inverters'] = [{'id': 1, 'power': 11.9}, ...]
       inverters_data = data.get("inverters", [])
 
       # Jika backend belum menyediakan format list per inverter, kita buat fallback dummy terstruktur
       if not inverters_data:
-        # Simulasi default kapasitas per inverter (asumsi total 12 inverter membagi rata kapasitas atau kapasitas nominal per inverter misal 125 kWp)
         inverters_data = []
         for i in range(1, 13):
           inverters_data.append({
               "id": i,
               "name": f"Inverter {i:02d}",
-              "power": round(
-                  11.0 + (i * 0.1), 2
-              ),  # Contoh daya aktif per inverter
+              "power": round(11.0 + (i * 0.1), 2),
               "capacity": 125.0,  # Kapasitas nominal per inverter (kWp)
           })
 
@@ -71,7 +67,6 @@ def get_realtime_data():
 
   except requests.exceptions.RequestException as e:
     st.sidebar.warning(f"Koneksi API gagal: {e}. Menggunakan nilai default.")
-    # Fallback data jika offline
     fallback_inverters = [
         {
             "id": i,
@@ -126,11 +121,11 @@ st.markdown(
     "### 🔌 Detail Kinerja & Performance Ratio (PR) Inverter 01 - 12"
 )
 
-# Membuat grid layout untuk 12 inverter (3 baris x 4 kolom)
+# Perbaikan pada baris ini (menggunakan kurung siku penutup list yang benar)
 cols_per_row = 4
 rows = [
     inverters_list[i : i + cols_per_row]
-    for i in range(0, len(inverters_list), cols_per_row]
+    for i in range(0, len(inverters_list), cols_per_row)
 ]
 
 for row in rows:
@@ -140,7 +135,7 @@ for row in rows:
       inv_id = inv.get("id")
       inv_name = inv.get("name", f"Inverter {inv_id}")
       inv_power = float(inv.get("power", 0.0))
-      inv_cap = float(inv.get("capacity", 125.0))  # Kapasitas nominal inverter
+      inv_cap = float(inv.get("capacity", 125.0))
 
       # Hitung PR per Inverter
       if irradiance_realtime > 0:
@@ -161,7 +156,6 @@ for row in rows:
         st.metric("Active Power", f"{inv_power:.2f} kW")
         st.metric("PR Inverter", f"{inv_pr:.2f}%")
 
-        # Indikator status kecil berdasarkan PR inverter
         if inv_pr >= 75:
           st.caption("🟢 Status: Normal / Optimal")
         elif 0 < inv_pr < 75:
@@ -178,11 +172,8 @@ st.success(f"Menampilkan mirror dari server internal via: `{NGROK_URL}`")
 try:
   st.components.v1.iframe(NGROK_URL, height=650, scrolling=True)
 except Exception as e:
-  st.error(
-      f"Gagal memuat halaman. Pastikan sesi Ngrok di PC kantor Anda masih aktif."
-      f" Error: {e}"
-  )
+  st.error(f"Gagal memuat halaman. Pastikan sesi Ngrok aktif. Error: {e}")
 
-# Auto-refresh halaman setiap 5 detik agar nilai metrik & PR per inverter terupdate otomatis
+# Auto-refresh halaman setiap 5 detik
 time.sleep(5)
 st.rerun()
