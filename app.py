@@ -61,34 +61,35 @@ installed_capacity = st.sidebar.number_input(
 st_cnd_irradiance = 1000.0  # W/m² STC
 
 
-# --- FUNGSI AMBIL DATA REAL-TIME DARI API SCADA ---
+# --- FUNGSI AMBIL DATA REAL-TIME DARI API SCADA INTERNAL ---
 def get_realtime_data(ngrok_endpoint):
   active_power_total = 0.0
   inverters_data = []
-  irradiance = 825.5  # Nilai acuan radiasi surya wilayah Grati (W/m²)
-  ambient_temp = 32.5  # Simulasi temperatur lingkungan (°C)
+  irradiance = 825.5     # Default acuan jika API offline
+  ambient_temp = 32.5    # Default acuan temperatur lingkungan jika API offline
 
   try:
-    # Mengambil data JSON dari endpoint API server internal
+    # Mengambil data dari API server internal (sesuaikan endpoint jika dari server SCADA)
     response = requests.get(f"{ngrok_endpoint}/api/live-data", timeout=3)
     if response.status_code == 200:
       data = response.json()
       active_power_total = float(data.get("active_power", 0.0))
       irradiance = float(data.get("irradiance", irradiance))
-      ambient_temp = float(data.get("ambient_temp", ambient_temp))
+      # Mengambil temperatur lingkungan dari key 'ambient_temp' atau 'temperature'
+      ambient_temp = float(data.get("ambient_temp", data.get("temperature", ambient_temp)))
       inverters_data = data.get("inverters", [])
       st.sidebar.success("Status: Terhubung ke API SCADA Lokal")
   except Exception:
-    st.sidebar.warning("⚠️ API Lokal Belum Terhubung. Menampilkan data fallback (0 kW).")
+    st.sidebar.warning("⚠️ API Lokal Belum Terhubung. Menggunakan nilai default.")
 
-  # Jika data dari API belum ada/kosong, inisialisasi default 12 Inverter
+  # Jika data inverter dari API kosong, inisialisasi default 12 Inverter
   if not inverters_data:
     for i in range(1, 13):
       cap = 128.4 if i <= 11 else 87.6
       inverters_data.append({
           "id": i,
           "name": f"Inverter {i:02d}",
-          "power": 0.0,  # Nilai awal 0 kW sebelum data API terbaca
+          "power": 0.0,
           "capacity": cap,
       })
 
