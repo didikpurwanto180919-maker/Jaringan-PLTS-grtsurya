@@ -39,9 +39,6 @@ LONGITUDE = 112.905121
 
 # Sidebar Konfigurasi Sistem & Input Dinamis URL Ngrok
 st.sidebar.header("⚙️ Status & Konfigurasi AI")
-
-# Anda bisa mengubah URL Ngrok ini langsung lewat Sidebar Streamlit 
-# tanpa harus edit kode script setiap kali ngrok direstart di komputer lokal!
 NGROK_URL = st.sidebar.text_input(
     "🔗 Masukkan URL Aktif Ngrok",
     value="https://reveler-striking-feminist.ngrok-free.dev",
@@ -58,7 +55,7 @@ installed_capacity = st.sidebar.number_input(
     "Kapasitas Total Terpasang (kWp)",
     min_value=100.0,
     max_value=50000.0,
-    value=1500.0,  # PLTS Grati 1.5 MWp
+    value=1500.0,
     step=50.0,
 )
 st_cnd_irradiance = 1000.0  # W/m² STC
@@ -69,7 +66,6 @@ def get_realtime_data(ngrok_endpoint):
   active_power_total = 0.0
   inverters_data = []
 
-  # 1. Ambil Active Power & Inverter dari API Server Internal Kantor via Ngrok
   try:
     response = requests.get(f"{ngrok_endpoint}/api/live-data", timeout=3)
     if response.status_code == 200:
@@ -80,7 +76,6 @@ def get_realtime_data(ngrok_endpoint):
   except Exception:
     st.sidebar.warning("API Lokal Offline / URL Ngrok belum aktif.")
 
-  # Jika data inverter dari API lokal kosong, buat struktur default 1-12
   if not inverters_data:
     for i in range(1, 13):
       cap = 128.4 if i <= 11 else 87.6
@@ -91,14 +86,12 @@ def get_realtime_data(ngrok_endpoint):
           "capacity": cap,
       })
 
-  # 2. Irradiance berdasarkan titik referensi Global Solar Atlas Grati
-  irradiance = 825.5  # Nilai acuan radiasi surya wilayah Grati (W/m²)
-  ambient_temp = 32.5  # Simulasi temperatur lingkungan (°C)
+  irradiance = 825.5
+  ambient_temp = 32.5
 
   return active_power_total, irradiance, ambient_temp, inverters_data
 
 
-# Ambil data realtime
 active_power_realtime, irradiance_realtime, ambient_temp, inverters_list = (
     get_realtime_data(NGROK_URL)
 )
@@ -240,3 +233,19 @@ for row in rows:
         elif 0 < inv_pr < 75:
           st.caption("🟡 Status: Rendah (Cek String/Panel)")
         else:
+          st.caption("🔴 Status: Offline / Trip")
+
+st.markdown("---")
+
+# Main Content: Embedding iframe SCADA / Server Internal
+st.subheader("🖥️ Live Mirror SCADA PLTGU Grati")
+st.success(f"Menampilkan mirror dari server internal via: `{NGROK_URL}`")
+
+try:
+  st.components.v1.iframe(NGROK_URL, height=650, scrolling=True)
+except Exception as e:
+  st.error(f"Gagal memuat halaman iframe. Error: {e}")
+
+# Auto-refresh data backend setiap 60 detik
+time.sleep(60)
+st.rerun()
