@@ -7,7 +7,7 @@ import streamlit.components.v1 as components
 
 # Konfigurasi halaman Streamlit
 st.set_page_config(
-    page_title="Dashboard PLTS GRT Surya",
+    page_title="Dashboard PLTS GRT Surya & SCADA",
     page_icon="⚡",
     layout="wide",
 )
@@ -38,7 +38,7 @@ LATITUDE = -7.678604
 LONGITUDE = 112.905121
 
 # Sidebar Konfigurasi Sistem & Input Dinamis URL Ngrok
-st.sidebar.header("⚙️ Status & Konfigurasi AI")
+st.sidebar.header("⚙️ Status & Konfigurasi API")
 NGROK_URL = st.sidebar.text_input(
     "🔗 Masukkan URL Aktif Ngrok",
     value="https://reveler-striking-feminist.ngrok-free.dev",
@@ -61,21 +61,30 @@ installed_capacity = st.sidebar.number_input(
 st_cnd_irradiance = 1000.0  # W/m² STC
 
 
-# --- FUNGSI AMBIL DATA ACTIVE POWER & IRRADIANCE ---
+# --- FUNGSI AMBIL DATA REAL-TIME DARI SERVER INTERNAL ---
 def get_realtime_data(ngrok_endpoint):
   active_power_total = 0.0
   inverters_data = []
+  irradiance = 825.5  # Nilai acuan radiasi surya default wilayah Grati (W/m²)
+  ambient_temp = 32.5  # Simulasi temperatur lingkungan (°C)
 
   try:
+    # Menembak endpoint API server internal (sesuaikan path endpoint jika berbeda di server Anda)
     response = requests.get(f"{ngrok_endpoint}/api/live-data", timeout=3)
     if response.status_code == 200:
       data = response.json()
       active_power_total = float(data.get("active_power", 0.0))
+      irradiance = float(data.get("irradiance", irradiance))
+      ambient_temp = float(data.get("ambient_temp", ambient_temp))
       inverters_data = data.get("inverters", [])
-      st.sidebar.success("Status: Terhubung ke SCADA Lokal")
+      st.sidebar.success("Status: Terhubung ke API SCADA Lokal")
+    else:
+      st.sidebar.warning("API Lokal merespons dengan status selain 200.")
   except Exception:
-    st.sidebar.warning("API Lokal Offline / URL Ngrok belum aktif.")
+    st.sidebar.warning("⚠️ Belum terhubung ke API Lokal. Menampilkan data fallback.")
 
+  # Jika data inverter dari API lokal belum ada/kosong, buat struktur default 1-12
+  # Sesuai konfigurasi: Inverter 1-11 (128.4 kWp), Inverter 12 (sisa dari 1500 kWp)
   if not inverters_data:
     for i in range(1, 13):
       cap = 128.4 if i <= 11 else 87.6
@@ -86,23 +95,23 @@ def get_realtime_data(ngrok_endpoint):
           "capacity": cap,
       })
 
-  irradiance = 825.5
-  ambient_temp = 32.5
-
   return active_power_total, irradiance, ambient_temp, inverters_data
 
 
-active_power_realtime, irradiance_realtime, ambient_temp, inverters_list = (
-    get_realtime_data(NGROK_URL)
-)
+# Ambil data realtime
+active_power_realtime, irradiance_realtime, ambient_temp, inverters_list = get_realtime_data(NGROK_URL)
+
+# Jika active_power_total dari API 0, hitung otomatis dari total daya inverter
+if active_power_realtime == 0.0 and inverters_list:
+  active_power_total = sum([float(inv.get("power", 0.0)) for inv in inverters_list])
+else:
+  active_power_total = active_power_realtime
 
 # --- Perhitungan Performance Ratio (PR) Total ---
 if irradiance_realtime > 0:
-  expected_power_total = installed_capacity * (
-      irradiance_realtime / st_cnd_irradiance
-  )
+  expected_power_total = installed_capacity * (irradiance_realtime / st_cnd_irradiance)
   performance_ratio_total = (
-      (active_power_realtime / expected_power_total) * 100
+      (active_power_total / expected_power_total) * 100
       if expected_power_total > 0
       else 0.0
   )
@@ -120,7 +129,7 @@ def run_ai_anomaly_detection(power, irradiance, pr):
 
 
 ai_anomaly_detected = run_ai_anomaly_detection(
-    active_power_realtime, irradiance_realtime, performance_ratio_total
+    active_power_total, irradiance_realtime, performance_ratio_total
 )
 
 
@@ -128,10 +137,8 @@ ai_anomaly_detected = run_ai_anomaly_detection(
 st.markdown("### 📊 Indikator Kinerja Total Sistem")
 m1, m2, m3, m4 = st.columns(4)
 
-m1.metric("Active Power Total (P_ac)", f"{active_power_realtime:,.2f} kW")
-m2.metric(
-    "Irradiance (Global Solar Atlas)", f"{irradiance_realtime:,.1f} W/m²"
-)
+m1.metric("Active Power Total (P_ac)", f"{active_power_total:,.2f} kW")
+m2.metric("Irradiance (Global Solar Atlas)", f"{irradiance_realtime:,.1f} W/m²")
 m3.metric("Temperatur Lingkungan", f"{ambient_temp:.1f} °C")
 m4.metric(
     "PR Total Sistem",
@@ -192,9 +199,7 @@ else:
 st.markdown("---")
 
 # --- MONITORING DETAIL INVERTER 1 SAMPAI 12 ---
-st.markdown(
-    "### 🔌 Detail Kinerja & Performance Ratio (PR) Inverter 01 - 12"
-)
+st.markdown("### 🔌 Detail Kinerja & Performance Ratio (PR) Inverter 01 - 12")
 
 cols_per_row = 4
 rows = [
@@ -210,10 +215,9 @@ for row in rows:
       inv_power = float(inv.get("power", 0.0))
       inv_cap = float(inv.get("capacity", 128.4))
 
+      # Hitung PR per Inverter
       if irradiance_realtime > 0:
-        inv_expected_power = inv_cap * (
-            irradiance_realtime / st_cnd_irradiance
-        )
+        inv_expected_power = inv_cap * (irradiance_realtime / st_cnd_irradiance)
         inv_pr = (
             (inv_power / inv_expected_power) * 100
             if inv_expected_power > 0
