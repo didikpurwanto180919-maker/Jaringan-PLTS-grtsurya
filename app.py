@@ -61,15 +61,15 @@ installed_capacity = st.sidebar.number_input(
 st_cnd_irradiance = 1000.0  # W/m² STC
 
 
-# --- FUNGSI AMBIL DATA REAL-TIME DARI SERVER INTERNAL ---
+# --- FUNGSI AMBIL DATA REAL-TIME DARI API SCADA ---
 def get_realtime_data(ngrok_endpoint):
   active_power_total = 0.0
   inverters_data = []
-  irradiance = 825.5  # Nilai acuan radiasi surya default wilayah Grati (W/m²)
+  irradiance = 825.5  # Nilai acuan radiasi surya wilayah Grati (W/m²)
   ambient_temp = 32.5  # Simulasi temperatur lingkungan (°C)
 
   try:
-    # Menembak endpoint API server internal (sesuaikan path endpoint jika berbeda di server Anda)
+    # Mengambil data JSON dari endpoint API server internal
     response = requests.get(f"{ngrok_endpoint}/api/live-data", timeout=3)
     if response.status_code == 200:
       data = response.json()
@@ -78,20 +78,17 @@ def get_realtime_data(ngrok_endpoint):
       ambient_temp = float(data.get("ambient_temp", ambient_temp))
       inverters_data = data.get("inverters", [])
       st.sidebar.success("Status: Terhubung ke API SCADA Lokal")
-    else:
-      st.sidebar.warning("API Lokal merespons dengan status selain 200.")
   except Exception:
-    st.sidebar.warning("⚠️ Belum terhubung ke API Lokal. Menampilkan data fallback.")
+    st.sidebar.warning("⚠️ API Lokal Belum Terhubung. Menampilkan data fallback (0 kW).")
 
-  # Jika data inverter dari API lokal belum ada/kosong, buat struktur default 1-12
-  # Sesuai konfigurasi: Inverter 1-11 (128.4 kWp), Inverter 12 (sisa dari 1500 kWp)
+  # Jika data dari API belum ada/kosong, inisialisasi default 12 Inverter
   if not inverters_data:
     for i in range(1, 13):
       cap = 128.4 if i <= 11 else 87.6
       inverters_data.append({
           "id": i,
           "name": f"Inverter {i:02d}",
-          "power": 11.5 if i <= 11 else 8.5,
+          "power": 0.0,  # Nilai awal 0 kW sebelum data API terbaca
           "capacity": cap,
       })
 
@@ -101,7 +98,7 @@ def get_realtime_data(ngrok_endpoint):
 # Ambil data realtime
 active_power_realtime, irradiance_realtime, ambient_temp, inverters_list = get_realtime_data(NGROK_URL)
 
-# Jika active_power_total dari API 0, hitung otomatis dari total daya inverter
+# Jika active_power_total 0, hitung otomatis dari total daya inverter yang aktif
 if active_power_realtime == 0.0 and inverters_list:
   active_power_total = sum([float(inv.get("power", 0.0)) for inv in inverters_list])
 else:
