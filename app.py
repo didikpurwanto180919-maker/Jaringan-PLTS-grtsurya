@@ -33,7 +33,7 @@ updateClock();
 components.html(clock_html, height=45)
 st.markdown("---")
 
-# URL Ngrok sumber data/SCADA internal
+# URL Ngrok sumber data/SCADA internal yang aktif
 NGROK_URL = "https://reveler-striking-feminist.ngrok-free.dev"
 
 # Koordinat Global Solar Atlas PLTS Grati
@@ -79,7 +79,6 @@ def get_realtime_data():
   # Sesuai permintaan: Inverter 1 s.d. 11 kapasitas 128.4 kWp, Inverter 12 menyesuaikan sisa total 1500 kWp
   if not inverters_data:
     for i in range(1, 13):
-      # Kapasitas inverter 1-11 sebesar 128.4 kWp, inverter 12 sisa dari 1500 - (128.4 * 11) = 87.6 kWp
       cap = 128.4 if i <= 11 else 87.6
       inverters_data.append({
           "id": i,
@@ -212,7 +211,6 @@ for row in rows:
     with cols[idx]:
       inv_name = inv.get("name", f"Inverter {idx+1:02d}")
       inv_power = float(inv.get("power", 0.0))
-      # Mengambil kapasitas dari data (Inverter 1-11 sebesar 128.4 kWp)
       inv_cap = float(inv.get("capacity", 128.4))
 
       # Hitung PR per Inverter berdasarkan kapasitas spesifik masing-masing inverter
