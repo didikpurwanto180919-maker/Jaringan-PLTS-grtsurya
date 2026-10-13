@@ -7,13 +7,13 @@ import streamlit.components.v1 as components
 
 # Konfigurasi halaman Streamlit
 st.set_page_config(
-    page_title="Dashboard PLTS GRT Surya & SCADA",
+    page_title="Dashboard PLTS GRT Surya",
     page_icon="⚡",
     layout="wide",
 )
 
 # Judul Aplikasi
-st.title("⚡ Live Dashboard Monitoring, AI Early Warning & SCADA Mirror")
+st.title("⚡ Live Dashboard Monitoring & AI Early Warning PLTS Grati")
 
 # --- WIDGET JAM REAL-TIME BERDETAK (JAVASCRIPT) ---
 clock_html = """
@@ -33,16 +33,21 @@ updateClock();
 components.html(clock_html, height=45)
 st.markdown("---")
 
-# URL Ngrok sumber data/SCADA internal (Menuju http://grtsurya.indonesiapower.co.id:82/)
-NGROK_URL = "https://reveler-striking-feminist.ngrok-free.dev"
-
 # Koordinat Global Solar Atlas PLTS Grati
 LATITUDE = -7.678604
 LONGITUDE = 112.905121
 
-# Sidebar Konfigurasi Sistem
+# Sidebar Konfigurasi Sistem & Input Dinamis URL Ngrok
 st.sidebar.header("⚙️ Status & Konfigurasi AI")
-st.sidebar.markdown(f"**URL Ngrok:** `{NGROK_URL}`")
+
+# Anda bisa mengubah URL Ngrok ini langsung lewat Sidebar Streamlit 
+# tanpa harus edit kode script setiap kali ngrok direstart di komputer lokal!
+NGROK_URL = st.sidebar.text_input(
+    "🔗 Masukkan URL Aktif Ngrok",
+    value="https://reveler-striking-feminist.ngrok-free.dev",
+    help="Salin URL Forwarding dari terminal Ngrok Anda di sini."
+)
+
 st.sidebar.markdown(f"**Lokasi GSA:** `{LATITUDE}, {LONGITUDE}`")
 st.sidebar.markdown("🤖 **AI Model:** Statistical Threshold & Anomaly Engine")
 st.sidebar.markdown("⏱️ **Auto-Refresh Data:** Setiap 60 Detik")
@@ -60,20 +65,20 @@ st_cnd_irradiance = 1000.0  # W/m² STC
 
 
 # --- FUNGSI AMBIL DATA ACTIVE POWER & IRRADIANCE ---
-def get_realtime_data():
+def get_realtime_data(ngrok_endpoint):
   active_power_total = 0.0
   inverters_data = []
 
   # 1. Ambil Active Power & Inverter dari API Server Internal Kantor via Ngrok
   try:
-    response = requests.get(f"{NGROK_URL}/api/live-data", timeout=3)
+    response = requests.get(f"{ngrok_endpoint}/api/live-data", timeout=3)
     if response.status_code == 200:
       data = response.json()
       active_power_total = float(data.get("active_power", 0.0))
       inverters_data = data.get("inverters", [])
       st.sidebar.success("Status: Terhubung ke SCADA Lokal")
   except Exception:
-    st.sidebar.warning("API Lokal Offline. Menggunakan nilai default.")
+    st.sidebar.warning("API Lokal Offline / URL Ngrok belum aktif.")
 
   # Jika data inverter dari API lokal kosong, buat struktur default 1-12
   if not inverters_data:
@@ -95,7 +100,7 @@ def get_realtime_data():
 
 # Ambil data realtime
 active_power_realtime, irradiance_realtime, ambient_temp, inverters_list = (
-    get_realtime_data()
+    get_realtime_data(NGROK_URL)
 )
 
 # --- Perhitungan Performance Ratio (PR) Total ---
@@ -212,7 +217,6 @@ for row in rows:
       inv_power = float(inv.get("power", 0.0))
       inv_cap = float(inv.get("capacity", 128.4))
 
-      # Hitung PR per Inverter
       if irradiance_realtime > 0:
         inv_expected_power = inv_cap * (
             irradiance_realtime / st_cnd_irradiance
@@ -236,31 +240,3 @@ for row in rows:
         elif 0 < inv_pr < 75:
           st.caption("🟡 Status: Rendah (Cek String/Panel)")
         else:
-          st.caption("🔴 Status: Offline / Trip")
-
-st.markdown("---")
-
-# --- EMBEDDING IFRAME SCADA / SERVER INTERNAL VIA NGROK ---
-st.subheader("🖥️ Live Mirror SCADA PLTGU Grati")
-st.info(
-    f"Menampilkan mirror langsung dari antarmuka web internal via: `{NGROK_URL}`"
-)
-
-if NGROK_URL:
-  try:
-    components.html(
-        f"""
-        <div style="width: 100%; height: 700px; overflow: hidden; border-radius: 8px; border: 1px solid #ccc;">
-            <iframe src="{NGROK_URL}" width="100%" height="700px" style="border:none;"></iframe>
-        </div>
-        """,
-        height=715,
-    )
-  except Exception as e:
-    st.error(f"Gagal memuat halaman iframe SCADA. Error: {e}")
-else:
-  st.warning("⚠️ URL Ngrok belum dikonfigurasi.")
-
-# Auto-refresh data backend setiap 60 detik
-time.sleep(60)
-st.rerun()
