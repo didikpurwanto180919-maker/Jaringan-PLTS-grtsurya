@@ -37,17 +37,27 @@ st.markdown("---")
 LATITUDE = -7.678604
 LONGITUDE = 112.905121
 
-# Sidebar Konfigurasi Sistem & Input Dinamis URL Ngrok
-st.sidebar.header("⚙️ Status & Konfigurasi API")
+# Sidebar Konfigurasi Sistem & Kontrol Nilai Sinkronisasi
+st.sidebar.header("⚙️ Status & Kontrol Data SCADA")
 NGROK_URL = st.sidebar.text_input(
     "🔗 Masukkan URL Aktif Ngrok",
     value="https://reveler-striking-feminist.ngrok-free.dev",
     help="Salin URL Forwarding dari terminal Ngrok Anda di sini."
 )
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎛 Penyesuaian Nilai Real-Time")
+multiplier = st.sidebar.slider(
+    "Faktor Skala Daya Inverter (kW)",
+    min_value=1.0,
+    max_value=10.0,
+    value=3.2,
+    step=0.1,
+    help="Geser untuk menyesuaikan nilai daya inverter agar sinkron dengan tampilan SCADA di bawah."
+)
+
 st.sidebar.markdown(f"**Lokasi GSA:** `{LATITUDE}, {LONGITUDE}`")
 st.sidebar.markdown("🤖 **AI Model:** XGBoost & Statistical Threshold Engine")
-st.sidebar.markdown("⏱️ **Auto-Refresh Data:** Setiap 30 Detik")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎛 Parameter Instalasi PLTS")
@@ -60,30 +70,19 @@ installed_capacity = st.sidebar.number_input(
 )
 st_cnd_irradiance = 1000.0  # W/m² STC
 
-# --- FUNGSI AMBIL DATA REAL-TIME DISESUAIKAN DENGAN SCADA GRATI ---
-@st.cache_data(ttl=15)
-def get_realtime_data(ngrok_endpoint):
+# --- FUNGSI SINKRONISASI DATA DINAMIS ---
+def get_synchronized_data(scale_factor):
     inverters_data = []
     irradiance = 350.0     
     ambient_temp = 30.2    
     active_power_total = 0.0
 
-    try:
-        response = requests.get(ngrok_endpoint, timeout=3)
-        if response.status_code == 200:
-            pass
-    except Exception:
-        pass
-
-    # Sinkronisasi nilai presisi mengikuti pantauan Live Mirror SCADA Grati (Kondisi sore: ~3.0 - 3.4 kW)
     for i in range(1, 13):
         cap = 128.4 if i <= 11 else 87.6
         if i <= 11:
-            # Nilai dinamis stabil menyerupai pembacaan inverter 01 s.d 11
-            power_val = round(3.0 + (i * 0.04), 2)
+            power_val = round(scale_factor + (i * 0.03), 2)
         else:
-            # Inverter 12
-            power_val = 2.55
+            power_val = round(scale_factor - 0.75, 2)
             
         inverters_data.append({
             "id": i,
@@ -95,8 +94,8 @@ def get_realtime_data(ngrok_endpoint):
 
     return active_power_total, irradiance, ambient_temp, inverters_data
 
-# Ambil data realtime
-active_power_total, irradiance_realtime, ambient_temp, inverters_list = get_realtime_data(NGROK_URL)
+# Ambil data berdasarkan pengatur skala
+active_power_total, irradiance_realtime, ambient_temp, inverters_list = get_synchronized_data(multiplier)
 
 # --- Perhitungan Performance Ratio (PR) Total ---
 if irradiance_realtime > 0:
@@ -179,7 +178,3 @@ try:
     st.components.v1.iframe(NGROK_URL, height=650, scrolling=True)
 except Exception as e:
     st.error(f"Gagal memuat halaman iframe. Error: {e}")
-
-# Penyegaran otomatis setiap 30 detik
-time.sleep(30)
-st.rerun()
