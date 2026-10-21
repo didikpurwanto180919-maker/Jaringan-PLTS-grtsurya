@@ -79,7 +79,7 @@ tariff_per_kwh = st.sidebar.number_input("Tarif Listrik (IDR/kWh)", value=1445, 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📲 Konfigurasi Alarm WhatsApp")
 wa_phone_number = st.sidebar.text_input(
-    "Nomor WhatsApp Tujuan (Gunakan kode negara, cth: 62812...)",
+    "Nomor WhatsApp Tujuan (Kode negara cth: 62812...)",
     value="6281234567890",
     help="Nomor tujuan untuk pengiriman alert via WhatsApp Web"
 )
@@ -224,7 +224,7 @@ elif alert_level == "WARNING":
         f"Diproyeksikan mencapai level kritis dalam **{days_to_critical} hari** jika tidak segera dibersihkan."
     )
 else:
-    st.success("✅ **LEVEL NORMAL:** Performa modul optimal di dalam koridor batas toleransi model ML.")
+    st.success("✅ **LEVEL NORMAL:** Performa modul optimal di dalam koridor toleransi model ML.")
 
 c1, c2, c3, c4 = st.columns([1.5, 1.5, 1.2, 1.2])
 
@@ -256,7 +256,7 @@ with c4:
         st.session_state.cleaning_scheduled = False
         st.toast("Baseline PR dan calibration ML berhasil di-reset!", icon="✅")
 
-# --- GENERATE LINK ALARM WHATSAPP WEB ---
+# Generate Link WhatsApp Web
 waktu_sekarang_str = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
 
 wa_message_raw = (
@@ -270,11 +270,10 @@ wa_message_raw = (
     f"⏳ *Proyeksi Batas Kritis:* {days_to_critical} hari lagi\n"
     f"⚡ *Potensi Energi Hilang:* {daily_energy_loss_kwh:,.1f} kWh/hari\n"
     f"💰 *Estimasi Kerugian:* Rp {daily_revenue_loss_idr:,.0f} / hari\n\n"
-    f"📌 *Rekomendasi:* Segera laksanakan prosedur pencucian / pembersihan modul PV untuk mencegah deviasi produksi lebih lanjut."
+    f"📌 *Rekomendasi:* Segera laksanakan prosedur pencucian modul PV."
 )
 
 encoded_wa_text = urllib.parse.quote(wa_message_raw)
-# Tautan langsung ke WhatsApp Web
 wa_web_url = f"https://web.whatsapp.com/send?phone={wa_phone_number}&text={encoded_wa_text}"
 
 st.markdown("#### 📲 Eksekusi Alarm Cepat ke WhatsApp")
