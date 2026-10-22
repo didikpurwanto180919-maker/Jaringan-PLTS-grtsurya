@@ -119,12 +119,11 @@ def get_clean_benchmark_model():
 
 ml_clean_model = get_clean_benchmark_model()
 
-# --- SINKRONISASI TELEMETRI REAL-TIME (SINKRON DENGAN SLD SCADA GRATI) ---
+# --- SINKRONISASI TELEMETRI REAL-TIME (DENGAN FLUKTUASI DINAMIS WAKTU WIB) ---
 def get_scada_telemetry():
     """
-    Mengambil data dari API JSON lokal via Ngrok. 
-    Jika offline, menggunakan array basis riil SCADA Grati (Inverter 01 - 12) 
-    dengan variasi mikro agar presisi dan selaras dengan tampilan Live Mirror SCADA.
+    Mencoba mengambil data dari API JSON lokal. Jika offline, 
+    menghasilkan data simulasi berbasis waktu WIB aktual (berfluktuasi secara real-time setiap 5 detik).
     """
     try:
         response = requests.get(f"{NGROK_URL.rstrip('/')}/api/inverters", timeout=1.5)
@@ -139,20 +138,38 @@ def get_scada_telemetry():
     except Exception:
         pass
     
-    # --- BASIS NILAI RIIL SESUAI SINGLE LINE DIAGRAM SCADA GRATI ---
-    base_scada_powers = [6.0, 5.8, 6.1, 6.2, 6.2, 5.5, 5.7, 5.7, 5.8, 5.7, 5.7, 4.1]
-    
+    # --- SIMULASI DINAMIS BERDASARKAN WAKTU WIB (REAL-TIME FLUCTUATION) ---
     now_utc = datetime.utcnow()
+    hour = (now_utc.hour + 7) % 24
+    minute = now_utc.minute
     second = now_utc.second
-    # Efek kedip mikro real-time yang sangat kecil agar sinkron dengan live update
-    micro_fluctuation = np.sin(second * np.pi / 10) * 0.03
+
+    if 6 <= hour <= 17:
+        solar_factor = max(0.1, 1.0 - abs(hour - 12) * 0.15)
+        # Menambahkan komponen acak/gelombang berdasarkan detik agar angka bergerak naik-turun realistis
+        noise = np.sin((minute * 60 + second) * np.pi / 20) * 0.35
+        base_val = max(1.5, (5.8 * solar_factor) + noise)
+        poa = round(820.0 * solar_factor + np.cos(minute * np.pi / 15) * 15, 1)
+        t_mod = round(45.0 + solar_factor * 12, 1)
+    else:
+        base_val = 0.0
+        poa = 0.0
+        t_mod = 27.5
 
     inverters = []
     total_power = 0.0
-
+    
     for i in range(1, 13):
         cap = 128.4 if i <= 11 else 87.6
-        p = round(max(0.0, base_scada_powers[i-1] + micro_fluctuation), 2)
+        # Memberikan variasi unik di setiap inverter (01 - 12)
+        inv_offset = np.sin((i * 11 + minute) * np.pi / 25) * 0.3
+        if base_val > 0:
+            p = round(max(0.5, base_val + inv_offset + (0.05 * (i % 4))), 2)
+            if i == 12:  # Inverter 12 kapasitas lebih kecil (87.6 kWp)
+                p = round(p * 0.72, 2)
+        else:
+            p = 0.0
+            
         inverters.append({
             "id": i, 
             "name": f"Inverter {i:02d}", 
@@ -161,7 +178,7 @@ def get_scada_telemetry():
         })
         total_power += p
 
-    return round(total_power, 2), 820.5, 45.2, inverters
+    return round(total_power, 2), max(50.0, poa), t_mod, inverters
 
 p_total, poa_realtime, t_module, inverters_list = get_scada_telemetry()
 
@@ -282,7 +299,7 @@ st.link_button(f"📲 Buka WhatsApp Web & Kirim Alarm ({alert_level})", url=wa_w
 
 st.markdown("---")
 
-# --- MONITORING DETAIL INVERTER 01 - 12 (SINKRON DENGAN SCADA) ---
+# --- MONITORING DETAIL INVERTER 01 - 12 (DINAMIS REAL-TIME) ---
 st.markdown("### 🔌 Telemetri Inverter Modular (Inverter 01 - 12)")
 
 cols_per_row = 4
