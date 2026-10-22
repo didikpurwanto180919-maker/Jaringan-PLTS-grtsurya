@@ -53,9 +53,6 @@ if "baseline_pr" not in st.session_state:
 if "cleaning_scheduled" not in st.session_state:
     st.session_state.cleaning_scheduled = False
 
-if "last_sent_alert" not in st.session_state:
-    st.session_state.last_sent_alert = None
-
 if "historical_df" not in st.session_state:
     history_data = {
         "Hari_Ke": [1, 2, 3, 4, 5, 6, 7],
@@ -85,17 +82,11 @@ soil_albedo = st.sidebar.number_input("Albedo Tanah (Soil Albedo)", value=0.08, 
 tariff_per_kwh = st.sidebar.number_input("Tarif Listrik (IDR/kWh)", value=1445, step=50)
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📲 Konfigurasi Gateway WhatsApp (Fonnte API)")
-fonnte_token = st.sidebar.text_input(
-    "Token API Fonnte",
-    value="",
-    type="password",
-    help="Masukkan token API Fonnte Anda untuk pengiriman otomatis"
-)
+st.sidebar.subheader("📲 Konfigurasi Alarm WhatsApp")
 wa_phone_number = st.sidebar.text_input(
-    "Nomor WhatsApp Tujuan / Grup",
+    "Nomor WhatsApp Tujuan",
     value="6281234567890",
-    help="Nomor tujuan atau ID grup WhatsApp"
+    help="Nomor tujuan untuk pengiriman alert via WhatsApp Web"
 )
 
 st.sidebar.markdown("---")
@@ -128,8 +119,12 @@ def get_clean_benchmark_model():
 
 ml_clean_model = get_clean_benchmark_model()
 
-# --- SINKRONISASI TELEMETRI REAL-TIME ---
+# --- SINKRONISASI TELEMETRI REAL-TIME (DENGAN FLUKTUASI DINAMIS WAKTU WIB) ---
 def get_scada_telemetry():
+    """
+    Mencoba mengambil data dari API JSON lokal. Jika offline, 
+    menghasilkan data simulasi berbasis waktu WIB aktual (berfluktuasi secara real-time setiap 5 detik).
+    """
     try:
         response = requests.get(f"{NGROK_URL.rstrip('/')}/api/inverters", timeout=1.5)
         if response.status_code == 200:
@@ -143,17 +138,38 @@ def get_scada_telemetry():
     except Exception:
         pass
     
-    base_scada_powers = [6.0, 5.8, 6.1, 6.2, 6.2, 5.5, 5.7, 5.7, 5.8, 5.7, 5.7, 4.1]
+    # --- SIMULASI DINAMIS BERDASARKAN WAKTU WIB (REAL-TIME FLUCTUATION) ---
     now_utc = datetime.utcnow()
+    hour = (now_utc.hour + 7) % 24
+    minute = now_utc.minute
     second = now_utc.second
-    micro_fluctuation = np.sin(second * np.pi / 10) * 0.03
+
+    if 6 <= hour <= 17:
+        solar_factor = max(0.1, 1.0 - abs(hour - 12) * 0.15)
+        # Menambahkan komponen acak/gelombang berdasarkan detik agar angka bergerak naik-turun realistis
+        noise = np.sin((minute * 60 + second) * np.pi / 20) * 0.35
+        base_val = max(1.5, (5.8 * solar_factor) + noise)
+        poa = round(820.0 * solar_factor + np.cos(minute * np.pi / 15) * 15, 1)
+        t_mod = round(45.0 + solar_factor * 12, 1)
+    else:
+        base_val = 0.0
+        poa = 0.0
+        t_mod = 27.5
 
     inverters = []
     total_power = 0.0
-
+    
     for i in range(1, 13):
         cap = 128.4 if i <= 11 else 87.6
-        p = round(max(0.0, base_scada_powers[i-1] + micro_fluctuation), 2)
+        # Memberikan variasi unik di setiap inverter (01 - 12)
+        inv_offset = np.sin((i * 11 + minute) * np.pi / 25) * 0.3
+        if base_val > 0:
+            p = round(max(0.5, base_val + inv_offset + (0.05 * (i % 4))), 2)
+            if i == 12:  # Inverter 12 kapasitas lebih kecil (87.6 kWp)
+                p = round(p * 0.72, 2)
+        else:
+            p = 0.0
+            
         inverters.append({
             "id": i, 
             "name": f"Inverter {i:02d}", 
@@ -162,7 +178,7 @@ def get_scada_telemetry():
         })
         total_power += p
 
-    return round(total_power, 2), 820.5, 45.2, inverters
+    return round(total_power, 2), max(50.0, poa), t_mod, inverters
 
 p_total, poa_realtime, t_module, inverters_list = get_scada_telemetry()
 
@@ -220,29 +236,6 @@ e_actual_proj = installed_capacity * daily_insol_kwh_m2 * (latest_pr / 100.0)
 daily_energy_loss_kwh = max(0.0, e_ideal_clean - e_actual_proj)
 daily_revenue_loss_idr = daily_energy_loss_kwh * tariff_per_kwh
 
-# --- FUNGSI PENGIRIMAN PESAN VIA FONNTE API ---
-def send_fonnte_whatsapp(target_phone, message_text, api_token):
-    if not api_token:
-        return False, "Token API Fonnte belum diisi di sidebar!"
-    
-    headers = {
-        "Authorization": api_token
-    }
-    payload = {
-        "target": target_phone,
-        "message": message_text,
-        "countryCode": "62"
-    }
-    try:
-        response = requests.post("https://api.fonnte.com/send", data=payload, headers=headers, timeout=8)
-        res_json = response.json()
-        if res_json.get("status"):
-            return True, "Pesan WhatsApp berhasil dikirim otomatis via Fonnte API!"
-        else:
-            return False, f"Gagal dari Fonnte: {res_json.get('reason', 'Unknown error')}"
-    except Exception as e:
-        return False, f"Error koneksi ke Fonnte API: {e}"
-
 # --- PANEL METRIK UTAMA ---
 st.markdown("### 📊 Indikator Kinerja & Machine Learning Insights")
 k1, k2, k3, k4, k5 = st.columns(5)
@@ -283,7 +276,7 @@ with c4:
         st.session_state.cleaning_scheduled = False
         st.toast("Baseline PR dan calibration ML berhasil di-reset!", icon="✅")
 
-# Pesan WhatsApp Template
+# WhatsApp Web Link Generator
 waktu_sekarang_str = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
 wa_message_raw = (
     f"🚨 *[PERINGATAN DINI - PLTS 1.5 MWp UBP GRATI]* 🚨\n\n"
@@ -298,28 +291,15 @@ wa_message_raw = (
     f"💰 *Estimasi Kerugian:* Rp {daily_revenue_loss_idr:,.0f} / hari\n\n"
     f"📌 *Rekomendasi:* Segera laksanakan prosedur pencucian modul PV."
 )
+encoded_wa_text = urllib.parse.quote(wa_message_raw)
+wa_web_url = f"https://web.whatsapp.com/send?phone={wa_phone_number}&text={encoded_wa_text}"
 
-st.markdown("#### 📲 Eksekusi Pengiriman Pesan WhatsApp (Fonnte API & Web)")
-col_wa1, col_wa2 = st.columns(2)
-
-with col_wa1:
-    # Tombol Kirim Otomatis via Fonnte API
-    if st.button("🚀 Kirim Otomatis via Fonnte API", type="primary" if alert_level in ["CRITICAL", "WARNING"] else "secondary", use_container_width=True):
-        success, info_msg = send_fonnte_whatsapp(wa_phone_number, wa_message_raw, fonnte_token)
-        if success:
-            st.success(info_msg)
-        else:
-            st.error(info_msg)
-
-with col_wa2:
-    # Tombol Alternatif WhatsApp Web
-    encoded_wa_text = urllib.parse.quote(wa_message_raw)
-    wa_web_url = f"https://web.whatsapp.com/send?phone={wa_phone_number}&text={encoded_wa_text}"
-    st.link_button(f"🌐 Buka WhatsApp Web ({alert_level})", url=wa_web_url, use_container_width=True)
+st.markdown("#### 📲 Eksekusi Alarm Cepat ke WhatsApp")
+st.link_button(f"📲 Buka WhatsApp Web & Kirim Alarm ({alert_level})", url=wa_web_url, type="primary" if alert_level in ["CRITICAL", "WARNING"] else "secondary")
 
 st.markdown("---")
 
-# --- MONITORING DETAIL INVERTER 01 - 12 ---
+# --- MONITORING DETAIL INVERTER 01 - 12 (DINAMIS REAL-TIME) ---
 st.markdown("### 🔌 Telemetri Inverter Modular (Inverter 01 - 12)")
 
 cols_per_row = 4
