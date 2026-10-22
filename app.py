@@ -28,13 +28,13 @@ st.title("⚡ PRO-BIFACIAL ML: Performance Ratio Optimization & AI Soiling Early
 # --- WIDGET JAM REAL-TIME ---
 clock_html = """
 <div style="font-family: monospace; font-size: 15px; font-weight: bold; color: #1b5e20; background-color: #e8f5e9; padding: 6px 12px; border-radius: 6px; display: inline-block;">
-    📅 Waktu Sistem: <span id="live-clock"></span>
+    📅 Waktu Sistem (WIB): <span id="live-clock"></span>
 </div>
 <script>
 function updateClock() {
     const now = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
-    document.getElementById('live-clock').innerText = now.toLocaleDateString('id-ID', options);
+    const options = { timeZone: 'Asia/Jakarta', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+    document.getElementById('live-clock').innerText = now.toLocaleString('id-ID', options);
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -56,8 +56,8 @@ if "historical_df" not in st.session_state:
     history_data = {
         "Hari_Ke": [1, 2, 3, 4, 5, 6, 7],
         "Tanggal": [
-            "2026-10-15", "2026-10-16", "2026-10-17", 
-            "2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21"
+            "2026-10-16", "2026-10-17", "2026-10-18", 
+            "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22"
         ],
         "POA_kWh_m2": [5.1, 2.3, 5.2, 5.0, 5.1, 4.9, 5.0],
         "Suhu_Modul_C": [47.5, 31.0, 48.2, 47.0, 48.0, 46.8, 47.2],
@@ -74,12 +74,14 @@ installed_capacity = st.sidebar.number_input("Kapasitas Terpasang (kWp)", value=
 stc_irradiance = 1000.0  # W/m²
 gamma_pmax = st.sidebar.number_input("Koefisien Suhu Pmax (%/°C)", value=-0.38, step=0.01) / 100.0
 stc_temp = 25.0  # °C
+tilt_angle = st.sidebar.slider("Sudut Kemiringan (Tilt Angle)", value=10.0, min_value=0.0, max_value=45.0, step=1.0)
+soil_albedo = st.sidebar.number_input("Albedo Tanah (Soil Albedo)", value=0.08, step=0.01)
 tariff_per_kwh = st.sidebar.number_input("Tarif Listrik (IDR/kWh)", value=1445, step=50)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📲 Konfigurasi Alarm WhatsApp")
 wa_phone_number = st.sidebar.text_input(
-    "Nomor WhatsApp Tujuan (Kode negara cth: 62812...)",
+    "Nomor WhatsApp Tujuan",
     value="6281234567890",
     help="Nomor tujuan untuk pengiriman alert via WhatsApp Web"
 )
@@ -99,7 +101,6 @@ def get_clean_benchmark_model():
     np.random.seed(42)
     poa_samples = np.random.uniform(2.5, 6.5, 150)
     temp_samples = 25.0 + (poa_samples * 4.4) + np.random.normal(0, 1.2, 150)
-    
     pr_clean_ideal = 82.5 - (0.0038 * (temp_samples - 25.0) * 8.0) + np.random.normal(0, 0.35, 150)
     
     X_synth = np.column_stack((poa_samples, temp_samples))
@@ -115,11 +116,12 @@ def get_clean_benchmark_model():
 
 ml_clean_model = get_clean_benchmark_model()
 
-# --- ENGINE AKUISISI TELEMETRI REAL-TIME ---
+# --- ENGINE AKUISISI TELEMETRI REAL-TIME (WIB Current Hour Constraint) ---
 def get_current_telemetry():
-    now = datetime.now()
-    hour = now.hour
-    minute = now.minute
+    now_utc = datetime.utcnow()
+    # Konversi ke WIB (UTC +7)
+    hour = (now_utc.hour + 7) % 24
+    minute = now_utc.minute
     micro = np.sin(minute * np.pi / 30) * 0.15
 
     if 6 <= hour <= 17:
@@ -191,7 +193,6 @@ else:
     alert_level = "NORMAL"
     status_label = "Modul Bersih / Beroperasi Optimal"
 
-# Estimasi Kehilangan Energi & Kerugian Finansial Harian
 daily_insol_kwh_m2 = 5.0
 e_ideal_clean = installed_capacity * daily_insol_kwh_m2 * (latest_clean_benchmark / 100.0)
 e_actual_proj = installed_capacity * daily_insol_kwh_m2 * (latest_pr / 100.0)
@@ -214,41 +215,23 @@ st.markdown("---")
 st.markdown("### 🧹 Sistem Peringatan Pembersihan & Integrasi Alarm WhatsApp")
 
 if alert_level == "CRITICAL":
-    st.error(
-        f"🚨 **LEVEL KRITIS:** PR aktual ({latest_pr:.2f}%) menembus batas kritis toleransi (-10% dari baseline). "
-        f"Kehilangan potensi energi mencapai **{daily_energy_loss_kwh:,.1f} kWh/hari**."
-    )
+    st.error(f"🚨 **LEVEL KRITIS:** PR aktual ({latest_pr:.2f}%) menembus batas kritis toleransi (-10% dari baseline). Kehilangan energi mencapai **{daily_energy_loss_kwh:,.1f} kWh/hari**.")
 elif alert_level == "WARNING":
-    st.warning(
-        f"⚠️ **LEVEL PERINGATAN:** Terdeteksi laju soiling **{daily_soiling_rate:.2f}% per hari**. "
-        f"Diproyeksikan mencapai level kritis dalam **{days_to_critical} hari** jika tidak segera dibersihkan."
-    )
+    st.warning(f"⚠️ **LEVEL PERINGATAN:** Terdeteksi laju soiling **{daily_soiling_rate:.2f}% per hari**. Diproyeksikan mencapai level kritis dalam **{days_to_critical} hari**.")
 else:
     st.success("✅ **LEVEL NORMAL:** Performa modul optimal di dalam koridor toleransi model ML.")
 
 c1, c2, c3, c4 = st.columns([1.5, 1.5, 1.2, 1.2])
 
 with c1:
-    st.metric(
-        "Kehilangan Energi (Loss kWh)", 
-        f"{daily_energy_loss_kwh:,.1f} kWh/hari",
-        delta=f"-{daily_energy_loss_kwh / e_ideal_clean * 100:.1f}% Potensi" if e_ideal_clean > 0 else "0%"
-    )
-
+    st.metric("Kehilangan Energi (Loss kWh)", f"{daily_energy_loss_kwh:,.1f} kWh/hari")
 with c2:
-    st.metric(
-        "Kehilangan Pendapatan", 
-        f"Rp {daily_revenue_loss_idr:,.0f} / hari",
-        delta=f"Rp {daily_revenue_loss_idr * 30:,.0f} / bulan",
-        delta_color="inverse"
-    )
-
+    st.metric("Kehilangan Pendapatan", f"Rp {daily_revenue_loss_idr:,.0f} / hari")
 with c3:
     st.write("")
     if st.button("📅 Jadwalkan Pembersihan", use_container_width=True):
         st.session_state.cleaning_scheduled = True
         st.toast("Work order pembersihan modul dimasukkan ke jadwal O&M!", icon="📝")
-
 with c4:
     st.write("")
     if st.button("✨ Pembersihan Selesai (Reset)", use_container_width=True):
@@ -256,12 +239,11 @@ with c4:
         st.session_state.cleaning_scheduled = False
         st.toast("Baseline PR dan calibration ML berhasil di-reset!", icon="✅")
 
-# Generate Link WhatsApp Web
+# WhatsApp Web Link Generator
 waktu_sekarang_str = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-
 wa_message_raw = (
     f"🚨 *[PERINGATAN DINI - PLTS 1.5 MWp]* 🚨\n\n"
-    f"📅 *Waktu:* {waktu_sekarang_str}\n"
+    f"📅 *Waktu:* {waktu_sekarang_str} WIB\n"
     f"⚠️ *Status Alert:* {status_label}\n"
     f"📉 *PR Aktual Terkoreksi:* {latest_pr:.2f}%\n"
     f"🤖 *ML Clean Benchmark:* {latest_clean_benchmark:.2f}%\n"
@@ -272,104 +254,15 @@ wa_message_raw = (
     f"💰 *Estimasi Kerugian:* Rp {daily_revenue_loss_idr:,.0f} / hari\n\n"
     f"📌 *Rekomendasi:* Segera laksanakan prosedur pencucian modul PV."
 )
-
 encoded_wa_text = urllib.parse.quote(wa_message_raw)
 wa_web_url = f"https://web.whatsapp.com/send?phone={wa_phone_number}&text={encoded_wa_text}"
 
 st.markdown("#### 📲 Eksekusi Alarm Cepat ke WhatsApp")
-st.link_button(
-    f"📲 Buka WhatsApp Web & Kirim Alarm ({alert_level})", 
-    url=wa_web_url, 
-    type="primary" if alert_level in ["CRITICAL", "WARNING"] else "secondary"
-)
-
-if st.session_state.cleaning_scheduled:
-    st.info("ℹ️ Status O&M: Pembersihan modul sedang berlangsung atau dalam antrean.")
+st.link_button(f"📲 Buka WhatsApp Web & Kirim Alarm ({alert_level})", url=wa_web_url, type="primary" if alert_level in ["CRITICAL", "WARNING"] else "secondary")
 
 st.markdown("---")
 
-# --- GRAFIK INTERAKTIF TREN HARIAN & PREDIKSI ML ---
-st.markdown("### 📈 Tren Harian Performance Ratio vs Iradiasi & Proyeksi AI")
-
-fig = go.Figure()
-
-fig.add_trace(go.Bar(
-    x=df_hist["Tanggal"],
-    y=df_hist["POA_kWh_m2"],
-    name="POA Insolasi Harian (kWh/m²)",
-    marker_color="rgba(255, 183, 77, 0.45)",
-    yaxis="y2"
-))
-
-fig.add_trace(go.Scatter(
-    x=df_hist["Tanggal"], 
-    y=df_hist["PR_Terkoreksi"],
-    mode="lines+markers",
-    name="PR Terkoreksi Suhu (%)",
-    line=dict(color="#1976d2", width=3),
-    yaxis="y1"
-))
-
-fig.add_trace(go.Scatter(
-    x=df_hist["Tanggal"],
-    y=df_hist["ML_Predicted_Clean_PR"],
-    mode="lines",
-    name="ML Predicted Clean PR (%)",
-    line=dict(color="#00897b", dash="dash", width=2),
-    yaxis="y1"
-))
-
-fig.add_trace(go.Scatter(
-    x=df_hist["Tanggal"],
-    y=[st.session_state.baseline_pr] * len(df_hist),
-    mode="lines",
-    name=f"Baseline PR ({st.session_state.baseline_pr:.1f}%)",
-    line=dict(color="#43a047", dash="dot"),
-    yaxis="y1"
-))
-
-fig.add_trace(go.Scatter(
-    x=df_hist["Tanggal"],
-    y=[critical_threshold] * len(df_hist),
-    mode="lines",
-    name="Batas Kritis Pembersihan (-10%)",
-    line=dict(color="#e53935", dash="dot", width=2),
-    yaxis="y1"
-))
-
-trend_x = list(df_hist["Tanggal"].iloc[-1:]) + ["2026-10-22", "2026-10-23", "2026-10-24"]
-trend_y = [latest_pr] + list(future_pr_forecast)
-
-fig.add_trace(go.Scatter(
-    x=trend_x,
-    y=trend_y,
-    mode="lines+markers",
-    name="Proyeksi Penurunan AI (Forecast)",
-    line=dict(color="#ab47bc", dash="dashdot", width=2),
-    yaxis="y1"
-))
-
-fig.update_layout(
-    xaxis=dict(title="Tanggal Operasional"),
-    yaxis=dict(title="Performance Ratio (%)", range=[60, 95], side="left"),
-    yaxis2=dict(
-        title="POA Insolasi (kWh/m²)",
-        overlaying="y",
-        side="right",
-        range=[0, 7],
-        showgrid=False
-    ),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    hovermode="x unified",
-    margin=dict(l=40, r=40, t=30, b=40),
-    height=440
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-st.markdown("---")
-
-# --- MONITORING DETAIL INVERTER 01 - 12 ---
+# --- MONITORING DETAIL INVERTER 01 - 12 (SESUAI GAMBAR SCADA) ---
 st.markdown("### 🔌 Telemetri Inverter Modular (Inverter 01 - 12)")
 
 cols_per_row = 4
@@ -394,7 +287,7 @@ for row in rows:
                 st.caption(f"Kapasitas: {inv_cap:.1f} kWp")
                 st.metric("Output Daya", f"{inv_power:.2f} kW")
                 st.metric("PR Inverter", f"{inv_pr:.2f}%")
-                st.caption("🟢 Status: Normal")
+                st.markdown("🟢 Status: Normal")
 
 st.markdown("---")
 
