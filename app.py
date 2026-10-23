@@ -119,21 +119,27 @@ def get_clean_benchmark_model():
 
 ml_clean_model = get_clean_benchmark_model()
 
-# --- SINKRONISASI TELEMETRI REAL-TIME (DENGAN FLUKTUASI DINAMIS WAKTU WIB) ---
+# --- SINKRONISASI TELEMETRI REAL-TIME (DENGAN BYPASS NGROK & FALLBACK SIMULASI) ---
 def get_scada_telemetry():
     """
-    Mencoba mengambil data dari API JSON lokal. Jika offline, 
-    menghasilkan data simulasi berbasis waktu WIB aktual (berfluktuasi secara real-time setiap 5 detik).
+    Mengambil data dari API JSON lokal via Ngrok dengan header bypass,
+    atau beralih ke simulasi jika koneksi gagal/terblokir.
     """
     try:
-        response = requests.get(f"{NGROK_URL.rstrip('/')}/api/inverters", timeout=1.5)
+        headers = {
+            "Bypass-Tunnel-Reminder": "true",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        response = requests.get(f"{NGROK_URL.rstrip('/')}/api/inverters", headers=headers, timeout=2.0)
+        
         if response.status_code == 200:
             data = response.json()
             return (
-                data.get("total_power", 0.0),
-                data.get("poa", 800.0),
-                data.get("t_module", 45.0),
-                data.get("inverters", [])
+                float(data.get("total_power", 0.0)),
+                float(data.get("poa", 800.0)),
+                float(data.get("t_module", 45.0)),
+                data.get("inverters", []),
+                True  # Status: Berhasil terhubung ke Live SCADA
             )
     except Exception:
         pass
@@ -146,7 +152,6 @@ def get_scada_telemetry():
 
     if 6 <= hour <= 17:
         solar_factor = max(0.1, 1.0 - abs(hour - 12) * 0.15)
-        # Menambahkan komponen acak/gelombang berdasarkan detik agar angka bergerak naik-turun realistis
         noise = np.sin((minute * 60 + second) * np.pi / 20) * 0.35
         base_val = max(1.5, (5.8 * solar_factor) + noise)
         poa = round(820.0 * solar_factor + np.cos(minute * np.pi / 15) * 15, 1)
@@ -161,11 +166,10 @@ def get_scada_telemetry():
     
     for i in range(1, 13):
         cap = 128.4 if i <= 11 else 87.6
-        # Memberikan variasi unik di setiap inverter (01 - 12)
         inv_offset = np.sin((i * 11 + minute) * np.pi / 25) * 0.3
         if base_val > 0:
             p = round(max(0.5, base_val + inv_offset + (0.05 * (i % 4))), 2)
-            if i == 12:  # Inverter 12 kapasitas lebih kecil (87.6 kWp)
+            if i == 12:
                 p = round(p * 0.72, 2)
         else:
             p = 0.0
@@ -178,9 +182,15 @@ def get_scada_telemetry():
         })
         total_power += p
 
-    return round(total_power, 2), max(50.0, poa), t_mod, inverters
+    return round(total_power, 2), max(50.0, poa), t_mod, inverters, False
 
-p_total, poa_realtime, t_module, inverters_list = get_scada_telemetry()
+p_total, poa_realtime, t_module, inverters_list, is_live_scada = get_scada_telemetry()
+
+# Indikator Status Koneksi API di Sidebar
+if is_live_scada:
+    st.sidebar.success("🟢 Status: Terhubung ke Live SCADA API")
+else:
+    st.sidebar.warning("🟡 Status: Menggunakan Mode Simulasi (API Ngrok Tidak Merespons)")
 
 # Formulasi PR Standar & PR Terkoreksi Suhu (IEC 61724)
 if poa_realtime > 0:
