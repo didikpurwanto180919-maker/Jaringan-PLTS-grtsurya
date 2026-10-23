@@ -119,19 +119,19 @@ def get_clean_benchmark_model():
 
 ml_clean_model = get_clean_benchmark_model()
 
-# --- SINKRONISASI TELEMETRI REAL-TIME (DENGAN BYPASS NGROK & SKALA RIIL) ---
+# --- SINKRONISASI TELEMETRI REAL-TIME (DENGAN NGROK SKIP BROWSER WARNING) ---
 def get_scada_telemetry():
     """
-    Mengambil data dari API JSON lokal via Ngrok dengan header bypass. 
-    Jika gagal, menggunakan simulasi fallback skala nyata (~82.9 kW).
+    Mengambil data dari API JSON lokal via Ngrok menggunakan header khusus 
+    'ngrok-skip-browser-warning' agar tembus dari halaman proteksi Ngrok.
     """
     api_error_msg = None
     try:
         headers = {
-            "Bypass-Tunnel-Reminder": "true",
+            "ngrok-skip-browser-warning": "true",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
-        response = requests.get(f"{NGROK_URL.rstrip('/')}/api/inverters", headers=headers, timeout=2.0)
+        response = requests.get(f"{NGROK_URL.rstrip('/')}/api/inverters", headers=headers, timeout=2.5)
         
         if response.status_code == 200:
             data = response.json()
@@ -144,11 +144,11 @@ def get_scada_telemetry():
                 None
             )
         else:
-            api_error_msg = f"HTTP Status Code: {response.status_code}"
+            api_error_msg = f"HTTP Status Code: {response.status_code} (Cek endpoint / format URL)"
     except Exception as e:
         api_error_msg = str(e)
     
-    # --- SIMULASI FALLBACK SKALA NYATA (MENYESUAIKAN 82.9 kW SCADA) ---
+    # --- SIMULASI FALLBACK DISESUAIKAN DENGAN NILAI RIIL SCADA (~83.7 kW) ---
     now_utc = datetime.utcnow()
     hour = (now_utc.hour + 7) % 24
     minute = now_utc.minute
@@ -156,10 +156,10 @@ def get_scada_telemetry():
 
     if 6 <= hour <= 17:
         solar_factor = max(0.2, 1.0 - abs(hour - 12) * 0.12)
-        noise = np.sin((minute * 60 + second) * np.pi / 15) * 2.5
-        base_inv_power = max(10.0, (85.0 * solar_factor) + noise)
-        poa = round(850.0 * solar_factor + np.cos(minute * np.pi / 15) * 20, 1)
-        t_mod = round(46.0 + solar_factor * 14, 1)
+        noise = np.sin((minute * 60 + second) * np.pi / 15) * 1.5
+        base_inv_power = max(10.0, (83.7 * solar_factor) + noise)
+        poa = round(837.0 * solar_factor + np.cos(minute * np.pi / 15) * 15, 1)
+        t_mod = round(46.0 + solar_factor * 12, 1)
     else:
         base_inv_power = 0.0
         poa = 0.0
@@ -170,9 +170,9 @@ def get_scada_telemetry():
     
     for i in range(1, 13):
         cap = 128.4 if i <= 11 else 87.6
-        inv_variance = np.sin((i * 7 + minute) * np.pi / 20) * 3.0
+        inv_variance = np.sin((i * 7 + minute) * np.pi / 20) * 2.0
         if base_inv_power > 0:
-            p = round(max(5.0, base_inv_power + inv_variance + (1.2 * (i % 3))), 2)
+            p = round(max(5.0, base_inv_power + inv_variance + (0.8 * (i % 3))), 2)
             p = min(p, cap * 0.85)
             if i == 12:  # Inverter 12 kapasitas lebih kecil (87.6 kWp)
                 p = round(p * 0.72, 2)
@@ -198,9 +198,20 @@ st.sidebar.subheader("🔌 Status Telemetri SCADA")
 if is_live_scada:
     st.sidebar.success("🟢 Terhubung ke Live SCADA API")
 else:
-    st.sidebar.warning("🟡 Mode Simulasi Skala Riil Aktif")
+    st.sidebar.warning("🟡 Mode Simulasi Aktif")
     with st.sidebar.expander("🔍 Lihat Detail Error API"):
         st.code(f"Endpoint: {NGROK_URL}/api/inverters\nError: {api_err}")
+    
+    # Opsi Penyesuaian Pengali Manual (Multiplier) jika ingin menyamakan angka secara instan
+    scada_sync_multiplier = st.sidebar.slider(
+        "⚡ Kalibrasi Pengali Daya Inverter", 
+        min_value=0.5, max_value=2.0, value=1.0, step=0.05,
+        help="Geser untuk menyamakan skala daya inverter dengan angka riil SCADA jika API tertahan."
+    )
+    if scada_sync_multiplier != 1.0:
+        p_total = round(p_total * scada_sync_multiplier, 2)
+        for inv in inverters_list:
+            inv["power"] = round(inv["power"] * scada_sync_multiplier, 2)
 
 # Formulasi PR Standar & PR Terkoreksi Suhu (IEC 61724)
 if poa_realtime > 0:
